@@ -19,11 +19,11 @@ public class Hunter extends Character {
         super("Hunter", portrait, Enums.CharClass.ASSASSIN, Enums.CharType.NIGHTMARE, Enums.Alliance.WITCH);
         this.rarity = Enums.Rarity.MYSTIC;
         this.originLocation = "Ice Town";
-        this.baseMaxHealth = 15;
-        this.baseAtk = 20;
+        this.baseMaxHealth = 30;
+        this.baseAtk = 30;
         this.baseMag = 0;
-        this.baseArmor = 3;
-        this.baseCloak = 3;
+        this.baseArmor = 0;
+        this.baseCloak = 0;
         this.baseSpeed = 980;
         this.baseSpeedReduction = 0.9;
         this.baseMoveDist = 1;

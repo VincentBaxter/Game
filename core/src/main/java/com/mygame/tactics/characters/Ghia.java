@@ -20,8 +20,8 @@ public class Ghia extends Character {
         super("Ghia", portrait, Enums.CharClass.ASSASSIN, Enums.CharType.FAUNA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.MYSTIC;
         this.originLocation = "Unknown";
-        this.baseMaxHealth = 20;
-        this.baseAtk = 10;
+        this.baseMaxHealth = 40;
+        this.baseAtk = 15;
         this.baseMag = 0;
         this.baseArmor = 0;
         this.baseCloak = 0;

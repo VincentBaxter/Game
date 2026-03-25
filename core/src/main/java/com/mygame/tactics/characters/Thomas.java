@@ -17,11 +17,11 @@ public class Thomas extends Character {
         super("Thomas", portrait, Enums.CharClass.ENGINEER, Enums.CharType.FIRE, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.CHAMPION;
         this.originLocation = "Unknown";
-        this.baseMaxHealth = 50;
-        this.baseAtk = 10;
-        this.baseMag = 5;
-        this.baseArmor = 5;
-        this.baseCloak = 5;
+        this.baseMaxHealth = 100;
+        this.baseAtk = 15;
+        this.baseMag = 8;
+        this.baseArmor = 2;
+        this.baseCloak = 2;
         this.baseSpeed = 890;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

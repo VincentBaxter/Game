@@ -45,7 +45,13 @@ public class NetworkMessage {
         DRAFT_COMPLETE,
 
         /** Game is over — read gameState.winnerTeam for the result. */
-        GAME_OVER
+        GAME_OVER,
+
+        /** Ranked: a round just ended. Read round/score fields; next draft is starting. */
+        RANKED_ROUND_OVER,
+
+        /** Ranked: all 3 rounds done. Read team1RoundWins/team2RoundWins for final score. */
+        RANKED_MATCH_OVER
     }
 
     /** What kind of message this is. */
@@ -101,6 +107,19 @@ public class NetworkMessage {
      */
     public int assignedTeam;
 
+    /** True when this room is a ranked match (3-round format). */
+    public boolean isRanked = false;
+
+    /** Current round number (1–3) in a ranked match. */
+    public int roundNumber = 0;
+
+    /** Team that won the round that just ended. Set on RANKED_ROUND_OVER. */
+    public int roundWinner = 0;
+
+    /** Cumulative round wins for each team. Set on RANKED_ROUND_OVER / RANKED_MATCH_OVER. */
+    public int team1RoundWins = 0;
+    public int team2RoundWins = 0;
+
     /** No-arg constructor required for Kryo serialization. */
     public NetworkMessage() {}
 
@@ -128,12 +147,40 @@ public class NetworkMessage {
         return m;
     }
 
-    public static NetworkMessage roomJoined(String gameId, int assignedTeam) {
+    public static NetworkMessage roomJoined(String gameId, int assignedTeam, boolean isRanked) {
         NetworkMessage m = new NetworkMessage();
         m.type         = Type.ROOM_JOINED;
         m.gameId       = gameId;
         m.assignedTeam = assignedTeam;
+        m.isRanked     = isRanked;
         m.success      = true;
+        return m;
+    }
+
+    public static NetworkMessage rankedRoundOver(String gameId, int roundNumber,
+            int roundWinner, int team1RoundWins, int team2RoundWins,
+            Array<String> nextRoundPool) {
+        NetworkMessage m = new NetworkMessage();
+        m.type           = Type.RANKED_ROUND_OVER;
+        m.gameId         = gameId;
+        m.roundNumber    = roundNumber;
+        m.roundWinner    = roundWinner;
+        m.team1RoundWins = team1RoundWins;
+        m.team2RoundWins = team2RoundWins;
+        m.remainingPool  = nextRoundPool != null ? nextRoundPool : new Array<>();
+        m.success        = true;
+        return m;
+    }
+
+    public static NetworkMessage rankedMatchOver(String gameId,
+            int team1RoundWins, int team2RoundWins) {
+        NetworkMessage m = new NetworkMessage();
+        m.type           = Type.RANKED_MATCH_OVER;
+        m.gameId         = gameId;
+        m.team1RoundWins = team1RoundWins;
+        m.team2RoundWins = team2RoundWins;
+        m.roundWinner    = (team1RoundWins > team2RoundWins) ? 1 : 2;
+        m.success        = true;
         return m;
     }
 
@@ -157,25 +204,25 @@ public class NetworkMessage {
     public static NetworkMessage draftUpdate(String gameId, int pickingTeam,
             Array<String> pool,
             Array<String> t1, Array<String> t2) {
-NetworkMessage m = new NetworkMessage();
-m.type          = Type.DRAFT_UPDATE;
-m.gameId        = gameId;
-m.success       = true;
-m.pickingTeam   = pickingTeam;
-m.remainingPool = pool;
-m.team1Picks    = t1;
-m.team2Picks    = t2;
-return m;
-}
+        NetworkMessage m = new NetworkMessage();
+        m.type          = Type.DRAFT_UPDATE;
+        m.gameId        = gameId;
+        m.success       = true;
+        m.pickingTeam   = pickingTeam;
+        m.remainingPool = pool;
+        m.team1Picks    = t1;
+        m.team2Picks    = t2;
+        return m;
+    }
 
-public static NetworkMessage draftComplete(String gameId,
-              Array<String> t1, Array<String> t2) {
-NetworkMessage m = new NetworkMessage();
-m.type       = Type.DRAFT_COMPLETE;
-m.gameId     = gameId;
-m.success    = true;
-m.team1Picks = t1;
-m.team2Picks = t2;
-return m;
-}
+    public static NetworkMessage draftComplete(String gameId,
+            Array<String> t1, Array<String> t2) {
+        NetworkMessage m = new NetworkMessage();
+        m.type       = Type.DRAFT_COMPLETE;
+        m.gameId     = gameId;
+        m.success    = true;
+        m.team1Picks = t1;
+        m.team2Picks = t2;
+        return m;
+    }
 }

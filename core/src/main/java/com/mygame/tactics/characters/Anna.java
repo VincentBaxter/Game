@@ -16,11 +16,11 @@ public class Anna extends Character {
         super("Anna", portrait, Enums.CharClass.FIGHTER, Enums.CharType.ANGELIC, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.COMMON;
         this.originLocation = "Unknown";
-        this.baseMaxHealth = 40;
-        this.baseAtk = 15;
+        this.baseMaxHealth = 80;
+        this.baseAtk = 23;
         this.baseMag = 0;
-        this.baseArmor = 3;
-        this.baseCloak = 4;
+        this.baseArmor = 0;
+        this.baseCloak = 1;
         this.baseSpeed = 815;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

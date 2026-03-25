@@ -14,6 +14,7 @@ import com.mygame.tactics.NetworkAction;
 import com.mygame.tactics.NetworkMessage;
 import com.mygame.tactics.Tile;
 import com.mygame.tactics.Timeline;
+import com.mygame.tactics.characters.Aevan;
 import com.mygame.tactics.characters.Aaron;
 import com.mygame.tactics.characters.Anna;
 import com.mygame.tactics.characters.Ben;
@@ -81,6 +82,8 @@ public class KryoRegistrar {
         kryo.register(Action.TwoStepAbilityAction.class);
         kryo.register(Action.DraftPickAction.class);
         kryo.register(Action.BoardChoiceAction.class);
+        kryo.register(Action.JoinQueueAction.class);
+        kryo.register(Action.RequestDraftStateAction.class);
 
         // --- EngineEvent subclasses ---
         kryo.register(EngineEvent.class);
@@ -108,6 +111,7 @@ public class KryoRegistrar {
 
         // --- Character base and all subclasses ---
         kryo.register(Character.class);
+        kryo.register(Aevan.class);
         kryo.register(Aaron.class);
         kryo.register(Anna.class);
         kryo.register(Ben.class);

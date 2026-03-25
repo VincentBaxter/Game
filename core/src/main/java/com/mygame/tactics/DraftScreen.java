@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.mygame.tactics.characters.Aevan;
 import com.mygame.tactics.characters.Aaron;
 import com.mygame.tactics.characters.Anna;
 import com.mygame.tactics.characters.Billy;
@@ -93,8 +94,12 @@ public class DraftScreen implements Screen {
     // Core fields
     // -----------------------------------------------------------------------
     private final Main             game;
-    private final NetworkClient    client;   // null in local mode
-    private final int              myTeam;   // 0 in local mode; 1 or 2 online
+    private final NetworkClient    client;       // null in local mode
+    private final int              myTeam;       // 0 in local mode; 1 or 2 online
+    private final boolean          isRanked;     // true in ranked online mode
+    private final int              roundNumber;  // current round (1–3) in ranked; 0 otherwise
+    private       int              team1RoundWins;
+    private       int              team2RoundWins;
 
     private final OrthographicCamera camera;
     private final FitViewport        viewport;
@@ -147,14 +152,31 @@ public class DraftScreen implements Screen {
 
     /** Local mode — no network. */
     public DraftScreen(Main game) {
-        this(game, null, 0);
+        this(game, null, 0, false, 0, 0, 0);
     }
 
-    /** Online mode — pass the connected NetworkClient and this player's team. */
+    /** Online casual mode — pass the connected NetworkClient and this player's team. */
     public DraftScreen(Main game, NetworkClient client, int myTeam) {
-        this.game   = game;
-        this.client = client;
-        this.myTeam = myTeam;
+        this(game, client, myTeam, false, 0, 0, 0);
+    }
+
+    /** Online mode (casual or ranked, no pre-filtered pool). */
+    public DraftScreen(Main game, NetworkClient client, int myTeam,
+                       boolean isRanked, int roundNumber, int t1Wins, int t2Wins) {
+        this(game, client, myTeam, isRanked, roundNumber, t1Wins, t2Wins, null);
+    }
+
+    /** Online mode — serverPool pre-filters the local pool for ranked round 2+. */
+    public DraftScreen(Main game, NetworkClient client, int myTeam,
+                       boolean isRanked, int roundNumber, int t1Wins, int t2Wins,
+                       Array<String> serverPool) {
+        this.game            = game;
+        this.client          = client;
+        this.myTeam          = myTeam;
+        this.isRanked        = isRanked;
+        this.roundNumber     = roundNumber;
+        this.team1RoundWins  = t1Wins;
+        this.team2RoundWins  = t2Wins;
 
         camera   = new OrthographicCamera();
         viewport = new FitViewport(1280, 720, camera);
@@ -169,6 +191,18 @@ public class DraftScreen implements Screen {
         for (int i = 0; i < 3; i++) boardCardBounds[i] = new Rectangle();
 
         buildPool();
+
+        // Pre-filter the local pool using the server's authoritative available list.
+        // This ensures locked characters from prior rounds are never shown, even
+        // before the RequestDraftStateAction response arrives.
+        if (serverPool != null && serverPool.size > 0) {
+            for (int i = pool.size - 1; i >= 0; i--) {
+                if (!serverPool.contains(pool.get(i).getName(), false)) {
+                    pool.removeIndex(i);
+                }
+            }
+        }
+
         recalcMaxScroll();
 
         // Wire up network listener if online
@@ -182,8 +216,15 @@ public class DraftScreen implements Screen {
                     Gdx.app.postRunnable(() -> handleServerMessage(msg));
                 }
             });
-            // In online mode team 2 waits for team 1's first pick
-            waitingForOpponent = (myTeam == 2);
+            if (isRanked) {
+                // Both teams wait until the server confirms pick order.
+                // The pool is already correctly filtered via serverPool above.
+                waitingForOpponent = true;
+                client.sendAction(new Action.RequestDraftStateAction(myTeam));
+            } else {
+                // Casual: team 2 waits for team 1's first pick
+                waitingForOpponent = (myTeam == 2);
+            }
         }
     }
 
@@ -201,7 +242,7 @@ public class DraftScreen implements Screen {
         pool.add(new Mason     (new Texture("mason.png")));
         pool.add(new Lark      (new Texture("lark.png")));
         pool.add(new Nathan    (new Texture("nathan.png")));
-        pool.add(new Luke      (new Texture("Luke.png")));
+        pool.add(new Luke      (new Texture("luke.png")));
         pool.add(new Brad      (new Texture("brad.png")));
         pool.add(new GuardTower(new Texture("guardtower.png")));
         pool.add(new Weirdguard(new Texture("weirdguard.png")));
@@ -212,8 +253,9 @@ public class DraftScreen implements Screen {
         pool.add(new Emily     (new Texture("emily.png")));
         pool.add(new Thomas    (new Texture("thomas.png")));
         pool.add(new Ghia      (new Texture("ghia.png")));
-        pool.add(new Maxx      (new Texture("Maxx.png")));
-        pool.add(new Ben       (new Texture("Ben.png")));
+        pool.add(new Maxx      (new Texture("maxx.png")));
+        pool.add(new Ben       (new Texture("ben.png")));
+        pool.add(new Aevan       (new Texture("aevan.png")));
     }
 
     /** Looks up a Character in the local pool by name. */
@@ -288,7 +330,12 @@ public class DraftScreen implements Screen {
             drawScrollbar(game.batch);
             drawPickPrompt(game.batch);
             drawConfirmButton(game.batch);
-            if (waitingForOpponent) drawWaitingOverlay(game.batch, "Waiting for opponent to pick...");
+            if (waitingForOpponent) {
+                String waitMsg = (isRanked && picksMade == TOTAL_PICKS)
+                        ? "Draft complete — waiting for battle to start..."
+                        : "Waiting for opponent to pick...";
+                drawWaitingOverlay(game.batch, waitMsg);
+            }
         }
 
         game.batch.end();
@@ -321,13 +368,17 @@ public class DraftScreen implements Screen {
             case DRAFT_COMPLETE:
                 // All picks done — apply final roster state
                 applyDraftUpdate(msg);
-                // Only team 1 selects the board; team 2 just waits
-                if (myTeam == 1) {
-                    boardSelectPhase    = true;
-                    waitingForOpponent  = false;
+                if (isRanked) {
+                    // In ranked mode the server auto-picks the map — just wait for ACTION_RESULT
+                    waitingForOpponent = true;
+                    boardSelectPhase   = false;
+                } else if (myTeam == 1) {
+                    // Casual: only team 1 selects the board
+                    boardSelectPhase   = true;
+                    waitingForOpponent = false;
                 } else {
-                    waitingForOpponent  = true;
-                    boardSelectPhase    = true; // triggers "waiting for board" overlay
+                    waitingForOpponent = true;
+                    boardSelectPhase   = true; // triggers "waiting for board" overlay
                 }
                 break;
 
@@ -337,8 +388,15 @@ public class DraftScreen implements Screen {
                 // CombatScreen can render characters correctly from the first frame.
                 if (msg.gameState != null) {
                     game.setScreen(new CombatScreen(game, msg.gameState,
-                            team1, team2, client, myTeam));
+                            team1, team2, client, myTeam, isRanked,
+                            roundNumber, team1RoundWins, team2RoundWins));
                 }
+                break;
+
+            case ACTION_REJECTED:
+                // Our pick was rejected by the server (e.g. character no longer available).
+                // Re-enable picking so the player can choose again.
+                waitingForOpponent = (pickingTeam != myTeam);
                 break;
 
             case GAME_OVER:
@@ -356,20 +414,16 @@ public class DraftScreen implements Screen {
      * The server is authoritative — we match its state exactly.
      */
     private void applyDraftUpdate(NetworkMessage msg) {
-        // Rebuild team rosters from server pick lists
+        // Move picked characters from pool to rosters
         syncRoster(team1, msg.team1Picks, 1);
         syncRoster(team2, msg.team2Picks, 2);
 
-        // Remove picked characters from the local pool
-        Array<String> allPicked = new Array<>();
-        allPicked.addAll(msg.team1Picks);
-        allPicked.addAll(msg.team2Picks);
-        for (String name : allPicked) {
-            for (int i = pool.size - 1; i >= 0; i--) {
-                if (pool.get(i).getName().equals(name)) {
-                    pool.removeIndex(i);
-                    break;
-                }
+        // Sync local pool to the server's authoritative remaining pool.
+        // This removes already-picked characters AND characters locked from
+        // prior ranked rounds (which are missing from msg.remainingPool).
+        for (int i = pool.size - 1; i >= 0; i--) {
+            if (!msg.remainingPool.contains(pool.get(i).getName(), false)) {
+                pool.removeIndex(i);
             }
         }
 
@@ -670,6 +724,9 @@ public class DraftScreen implements Screen {
         } else {
             int teamPicks = (pickingTeam == 1) ? team1.size : team2.size;
             label = "TEAM " + pickingTeam + "  —  PICK " + (teamPicks + 1) + " OF " + PICKS_PER_TEAM;
+        }
+        if (isRanked && roundNumber > 0) {
+            label = "ROUND " + roundNumber + "/3  |  " + label;
         }
         game.font.getData().setScale(0.9f);
         game.font.setColor(tc);

@@ -158,6 +158,8 @@ public abstract class Character {
         if (active) this.ultUsed = true;
     }
 
+    public void setUltUsed(boolean used) { this.ultUsed = used; }
+
     public boolean isUltActive() { return ultActive; }
     public boolean isUltUsed() { return ultUsed; }
     public int getTurnsTaken() { return turnsTaken; }

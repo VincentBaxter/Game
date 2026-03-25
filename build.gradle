@@ -24,7 +24,7 @@ allprojects {
 
 configure(subprojects) {
   apply plugin: 'java-library'
-  java.sourceCompatibility = 8
+  java.sourceCompatibility = 11
 
   tasks.register('generateAssetList') {
     inputs.dir("${project.rootDir}/assets/")

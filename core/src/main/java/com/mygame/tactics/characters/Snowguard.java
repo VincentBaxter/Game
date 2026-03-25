@@ -16,11 +16,11 @@ public class Snowguard extends Character {
         super("Snowguard", portrait, Enums.CharClass.TANK, Enums.CharType.AQUA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.COMMON;
         this.originLocation = "Trade Hub";
-        this.baseMaxHealth = 30;
+        this.baseMaxHealth = 60;
         this.baseAtk = 0;
-        this.baseMag = 8;
+        this.baseMag = 12;
         this.baseArmor = 0;
-        this.baseCloak = 12;
+        this.baseCloak = 9;
         this.baseSpeed = 950;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

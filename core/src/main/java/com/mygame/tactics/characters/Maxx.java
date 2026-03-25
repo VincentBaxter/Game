@@ -18,11 +18,11 @@ public class Maxx extends Character {
         super("Maxx", portrait, Enums.CharClass.FIGHTER, Enums.CharType.NIGHTMARE, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.RARE;
         this.originLocation = "Unknown";
-        this.baseMaxHealth = 45;
-        this.baseAtk = 12;
+        this.baseMaxHealth = 90;
+        this.baseAtk = 18;
         this.baseMag = 0;
-        this.baseArmor = 10;
-        this.baseCloak = 10;
+        this.baseArmor = 7;
+        this.baseCloak = 7;
         this.baseSpeed = 686;
         this.baseSpeedReduction = 1.1;
         this.baseMoveDist = 2;

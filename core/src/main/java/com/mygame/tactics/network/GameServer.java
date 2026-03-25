@@ -11,6 +11,7 @@ import com.mygame.tactics.GameEngine;
 import com.mygame.tactics.GameState;
 import com.mygame.tactics.NetworkAction;
 import com.mygame.tactics.NetworkMessage;
+import com.mygame.tactics.characters.Aevan;
 import com.mygame.tactics.characters.Aaron;
 import com.mygame.tactics.characters.Anna;
 import com.mygame.tactics.characters.Ben;
@@ -37,6 +38,9 @@ import com.mygame.tactics.characters.Weirdguard;
 import com.badlogic.gdx.utils.Array;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -86,8 +90,17 @@ public class GameServer {
     // -----------------------------------------------------------------------
     private final Server kryoServer;
 
-    /** Connections waiting for a second player. At most one at a time. */
-    private Connection waitingConnection = null;
+    /** Casual queue — waiting for a second player. */
+    private Connection waitingCasual = null;
+
+    /** Ranked queue — waiting for a second player. */
+    private Connection waitingRanked = null;
+
+    /**
+     * Connections that have connected but not yet sent JoinQueueAction.
+     * Keyed by connection ID.
+     */
+    private final Map<Integer, Connection> pendingConnections = new ConcurrentHashMap<>();
 
     /** Maps connectionId -> GameRoom so disconnects can be routed. */
     private final Map<Integer, GameRoom> roomByConnection = new ConcurrentHashMap<>();
@@ -150,35 +163,62 @@ public class GameServer {
     // Connection / matchmaking
     // -----------------------------------------------------------------------
     private synchronized void handleNewConnection(Connection conn) {
-        if (waitingConnection == null) {
-            // First player — put them in the queue
-            waitingConnection = conn;
-            log("Player queued, waiting for opponent...");
+        // Hold the connection until it sends JoinQueueAction to tell us which queue.
+        pendingConnections.put(conn.getID(), conn);
+        log("Client " + conn.getID() + " connected — awaiting queue selection.");
+    }
+
+    private synchronized void handleJoinQueue(Connection conn, boolean ranked) {
+        pendingConnections.remove(conn.getID());
+        String mode = ranked ? "RANKED" : "CASUAL";
+        if (ranked) {
+            if (waitingRanked == null) {
+                waitingRanked = conn;
+                log("Player queued for RANKED, waiting for opponent...");
+            } else {
+                createRoom(waitingRanked, conn, true);
+                waitingRanked = null;
+            }
         } else {
-            // Second player — create a room
-            Connection team1Conn = waitingConnection;
-            Connection team2Conn = conn;
-            waitingConnection = null;
-
-            String gameId = UUID.randomUUID().toString().substring(0, 8);
-            GameRoom room = new GameRoom(gameId, team1Conn, team2Conn);
-            roomByConnection.put(team1Conn.getID(), room);
-            roomByConnection.put(team2Conn.getID(), room);
-
-            // Tell both clients which team they are
-            team1Conn.sendTCP(NetworkMessage.roomJoined(gameId, 1));
-            team2Conn.sendTCP(NetworkMessage.roomJoined(gameId, 2));
-
-            log("[" + gameId + "] Room created — starting draft.");
-            room.startDraft();
+            if (waitingCasual == null) {
+                waitingCasual = conn;
+                log("Player queued for CASUAL, waiting for opponent...");
+            } else {
+                createRoom(waitingCasual, conn, false);
+                waitingCasual = null;
+            }
         }
     }
 
+    private void createRoom(Connection team1Conn, Connection team2Conn, boolean ranked) {
+        String gameId = UUID.randomUUID().toString().substring(0, 8);
+        GameRoom room = new GameRoom(gameId, team1Conn, team2Conn, ranked);
+        roomByConnection.put(team1Conn.getID(), room);
+        roomByConnection.put(team2Conn.getID(), room);
+
+        team1Conn.sendTCP(NetworkMessage.roomJoined(gameId, 1, ranked));
+        team2Conn.sendTCP(NetworkMessage.roomJoined(gameId, 2, ranked));
+
+        log("[" + gameId + "] " + (ranked ? "RANKED" : "CASUAL") + " room created — starting draft.");
+        room.startDraft();
+    }
+
     private synchronized void handleDisconnect(Connection conn) {
-        // Remove from matchmaking queue if they were waiting
-        if (waitingConnection != null && waitingConnection.getID() == conn.getID()) {
-            waitingConnection = null;
-            log("Queued player disconnected before match was found.");
+        // Check pending connections (not yet in a queue)
+        if (pendingConnections.remove(conn.getID()) != null) {
+            log("Client " + conn.getID() + " disconnected before selecting a queue.");
+            return;
+        }
+        // Check casual queue
+        if (waitingCasual != null && waitingCasual.getID() == conn.getID()) {
+            waitingCasual = null;
+            log("Queued CASUAL player disconnected before match was found.");
+            return;
+        }
+        // Check ranked queue
+        if (waitingRanked != null && waitingRanked.getID() == conn.getID()) {
+            waitingRanked = null;
+            log("Queued RANKED player disconnected before match was found.");
             return;
         }
 
@@ -200,6 +240,12 @@ public class GameServer {
     // Action routing
     // -----------------------------------------------------------------------
     private void handleNetworkAction(Connection conn, NetworkAction na) {
+        // JoinQueueAction is handled before room assignment (connection is still pending)
+        if (na.action instanceof Action.JoinQueueAction) {
+            handleJoinQueue(conn, ((Action.JoinQueueAction) na.action).ranked);
+            return;
+        }
+
         GameRoom room = roomByConnection.get(conn.getID());
         if (room == null) {
             conn.sendTCP(NetworkMessage.rejected(na.gameId, "Not in a game room."));
@@ -216,6 +262,7 @@ public class GameServer {
         final String gameId;
         final Connection conn1; // team 1
         final Connection conn2; // team 2
+        final boolean isRanked;
 
         // Draft state
         final Array<String> pool         = new Array<>(); // remaining character names
@@ -229,10 +276,30 @@ public class GameServer {
         GameState  state  = null;
         GameEngine engine = null;
 
-        GameRoom(String gameId, Connection conn1, Connection conn2) {
-            this.gameId = gameId;
-            this.conn1  = conn1;
-            this.conn2  = conn2;
+        // Ranked state
+        int currentRound    = 1;
+        int team1RoundWins  = 0;
+        int team2RoundWins  = 0;
+        final Array<String> allLockedCharacters = new Array<>();
+        final BoardConfig.BoardType[] rankedMapOrder;
+
+        GameRoom(String gameId, Connection conn1, Connection conn2, boolean ranked) {
+            this.gameId    = gameId;
+            this.conn1     = conn1;
+            this.conn2     = conn2;
+            this.isRanked  = ranked;
+
+            // Shuffle the three maps for ranked play
+            if (ranked) {
+                ArrayList<BoardConfig.BoardType> maps = new ArrayList<>(
+                        Arrays.asList(BoardConfig.BoardType.FOREST,
+                                      BoardConfig.BoardType.WIND,
+                                      BoardConfig.BoardType.DESERT));
+                Collections.shuffle(maps);
+                rankedMapOrder = maps.toArray(new BoardConfig.BoardType[0]);
+            } else {
+                rankedMapOrder = null;
+            }
         }
 
         // -------------------------------------------------------------------
@@ -243,32 +310,21 @@ public class GameServer {
             broadcastDraftState();
         }
 
-        /** Build the canonical character pool (names only — no textures on server). */
+        /** Build the canonical character pool (names only — no textures on server).
+         *  In ranked mode, characters used in previous rounds are excluded. */
         private void buildPool() {
             // Must stay in sync with DraftScreen.buildPool()
-            pool.add("Hunter");
-            pool.add("Sean");
-            pool.add("Jaxon");
-            pool.add("Evan");
-            pool.add("Billy");
-            pool.add("Aaron");
-            pool.add("Speen");
-            pool.add("Mason");
-            pool.add("Lark");
-            pool.add("Nathan");
-            pool.add("Luke");
-            pool.add("Brad");
-            pool.add("Guard Tower");
-            pool.add("Weirdguard");
-            pool.add("Stoneguard");
-            pool.add("Snowguard");
-            pool.add("Tyler");
-            pool.add("Anna");
-            pool.add("Emily");
-            pool.add("Thomas");
-            pool.add("Ghia");
-            pool.add("Maxx");
-            pool.add("Ben");
+            String[] all = {
+                "Hunter", "Sean", "Jaxon", "Evan", "Billy", "Aaron", "Speen",
+                "Mason", "Lark", "Nathan", "Luke", "Brad", "Guard Tower", "Weirdguard",
+                "Stoneguard", "Snowguard", "Tyler", "Anna", "Emily", "Thomas",
+                "Ghia", "Maxx", "Ben", "Aevan"
+            };
+            for (String name : all) {
+                if (!allLockedCharacters.contains(name, false)) {
+                    pool.add(name);
+                }
+            }
         }
 
         /**
@@ -323,12 +379,20 @@ public class GameServer {
                     + " (" + picksMade + "/" + TOTAL_PICKS + ")");
 
             if (picksMade == TOTAL_PICKS) {
-                // Draft complete — ask team 1 to choose the board
+                // Draft complete — notify both clients
                 NetworkMessage doneMsg = buildDraftUpdateMessage();
                 doneMsg.type = NetworkMessage.Type.DRAFT_COMPLETE;
                 conn1.sendTCP(doneMsg);
                 conn2.sendTCP(doneMsg);
-                log("[" + gameId + "] Draft complete. Waiting for Team 1 to choose board.");
+
+                if (isRanked) {
+                    // In ranked mode, auto-select this round's pre-shuffled map
+                    BoardConfig config = boardConfigFor(rankedMapOrder[currentRound - 1]);
+                    log("[" + gameId + "] Round " + currentRound + " draft complete — auto-starting on " + rankedMapOrder[currentRound - 1]);
+                    startBattle(config);
+                } else {
+                    log("[" + gameId + "] Draft complete. Waiting for Team 1 to choose board.");
+                }
             } else {
                 broadcastDraftState();
             }
@@ -426,6 +490,7 @@ public class GameServer {
                 case "Ghia":        return new Ghia(null);
                 case "Maxx":        return new Maxx(null);
                 case "Ben":         return new Ben(null);
+                case "Aevan":       return new Aevan(null);
                 default:
                     log("WARNING: Unknown character name '" + name + "' — skipping.");
                     return null;
@@ -443,6 +508,9 @@ public class GameServer {
                     handleDraftPick(conn, na);
                 } else if (na.action instanceof Action.BoardChoiceAction) {
                     handleBoardChoice(conn, na);
+                } else if (na.action instanceof Action.RequestDraftStateAction) {
+                    // Client just set up its DraftScreen — send it the current pool state
+                    conn.sendTCP(buildDraftUpdateMessage());
                 } else {
                     conn.sendTCP(NetworkMessage.rejected(na.gameId,
                             "Game has not started yet."));
@@ -470,9 +538,85 @@ public class GameServer {
 
             if (state.isGameOver()) {
                 log("[" + gameId + "] Game over — team " + state.winnerTeam + " wins.");
+                if (isRanked) {
+                    handleRankedRoundOver();
+                } else {
+                    roomByConnection.remove(conn1.getID());
+                    roomByConnection.remove(conn2.getID());
+                }
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // Ranked round/match management
+        // -------------------------------------------------------------------
+        private synchronized void handleRankedRoundOver() {
+            // Credit the round win
+            if (state.winnerTeam == 1) team1RoundWins++;
+            else                       team2RoundWins++;
+
+            // Lock characters used this round so they cannot be picked again
+            allLockedCharacters.addAll(team1Picks);
+            allLockedCharacters.addAll(team2Picks);
+
+            log("[" + gameId + "] Round " + currentRound + " over. Wins: T1="
+                    + team1RoundWins + " T2=" + team2RoundWins);
+
+            // Compute next round's available pool (allLockedCharacters is already updated)
+            // so the client can pre-filter immediately without a server round-trip.
+            Array<String> nextPool = computeNextPool();
+
+            // Notify both clients of the round result
+            NetworkMessage roundOver = NetworkMessage.rankedRoundOver(
+                    gameId, currentRound, state.winnerTeam, team1RoundWins, team2RoundWins,
+                    nextPool);
+            conn1.sendTCP(roundOver);
+            conn2.sendTCP(roundOver);
+
+            // Match ends if a team has 2 wins or all 3 rounds have been played
+            if (team1RoundWins >= 2 || team2RoundWins >= 2 || currentRound >= 3) {
+                NetworkMessage matchOver = NetworkMessage.rankedMatchOver(
+                        gameId, team1RoundWins, team2RoundWins);
+                conn1.sendTCP(matchOver);
+                conn2.sendTCP(matchOver);
+                log("[" + gameId + "] Match over. Final: T1=" + team1RoundWins + " T2=" + team2RoundWins);
                 roomByConnection.remove(conn1.getID());
                 roomByConnection.remove(conn2.getID());
+            } else {
+                currentRound++;
+                startNextRound();
             }
+        }
+
+        /** Returns the pool of available character names for the next round. */
+        private Array<String> computeNextPool() {
+            String[] all = {
+                "Hunter", "Sean", "Jaxon", "Evan", "Billy", "Aaron", "Speen",
+                "Mason", "Lark", "Nathan", "Luke", "Brad", "Guard Tower", "Weirdguard",
+                "Stoneguard", "Snowguard", "Tyler", "Anna", "Emily", "Thomas",
+                "Ghia", "Maxx", "Ben", "Aevan"
+            };
+            Array<String> next = new Array<>();
+            for (String name : all) {
+                if (!allLockedCharacters.contains(name, false)) {
+                    next.add(name);
+                }
+            }
+            return next;
+        }
+
+        private void startNextRound() {
+            pool.clear();
+            team1Picks.clear();
+            team2Picks.clear();
+            pickingTeam = 1;
+            picksMade   = 0;
+            boardChosen = false;
+            state       = null;
+            engine      = null;
+            buildPool(); // excludes previously locked characters
+            log("[" + gameId + "] Starting round " + currentRound + " draft.");
+            broadcastDraftState();
         }
 
         // -------------------------------------------------------------------

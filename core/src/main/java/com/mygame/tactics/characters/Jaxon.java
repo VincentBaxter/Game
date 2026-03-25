@@ -18,11 +18,11 @@ public class Jaxon extends Character {
         super("Jaxon", portrait, Enums.CharClass.FIGHTER, Enums.CharType.WIND, Enums.Alliance.QUEEN);
         this.rarity = Enums.Rarity.MYSTIC;
         this.originLocation = "Capital";
-        this.baseMaxHealth = 66;
-        this.baseAtk = 16;
+        this.baseMaxHealth = 132;
+        this.baseAtk = 24;
         this.baseMag = 0;
-        this.baseArmor = 10;
-        this.baseCloak = 10;
+        this.baseArmor = 7;
+        this.baseCloak = 7;
         this.baseSpeed = 720;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

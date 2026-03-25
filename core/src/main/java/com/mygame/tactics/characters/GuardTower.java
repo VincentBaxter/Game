@@ -17,11 +17,11 @@ public class GuardTower extends Character {
         super("Guard Tower", portrait, Enums.CharClass.STATUE, Enums.CharType.WIND, Enums.Alliance.QUEEN);
         this.rarity = Enums.Rarity.COMMON;
         this.originLocation = "Queen Capital";
-        this.baseMaxHealth = 20;
-        this.baseAtk = 8;
+        this.baseMaxHealth = 40;
+        this.baseAtk = 12;
         this.baseMag = 0;
-        this.baseArmor = 15;
-        this.baseCloak = 80;
+        this.baseArmor = 12;
+        this.baseCloak = 77;
         this.baseSpeed = 1200;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 0;

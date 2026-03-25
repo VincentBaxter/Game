@@ -16,10 +16,10 @@ public class Brad extends Character {
         super("Brad", portrait, Enums.CharClass.SNIPER, Enums.CharType.AQUA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.SPECIAL;
         this.originLocation = "Trade Hub";
-        this.baseMaxHealth = 30;
-        this.baseAtk = 10;
+        this.baseMaxHealth = 60;
+        this.baseAtk = 15;
         this.baseMag = 0;
-        this.baseArmor = 10;
+        this.baseArmor = 7;
         this.baseCloak = 0;
         this.baseSpeed = 762;
         this.baseSpeedReduction = 1.0;

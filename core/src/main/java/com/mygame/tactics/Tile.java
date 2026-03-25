@@ -171,8 +171,23 @@ public class Tile {
         return fireTurnsActive;
     }
 
+    /** Remaining turns before the fire goes out. */
+    public int getFireDuration() {
+        return fireDuration;
+    }
+
     public Character getFireSource() {
         return fireSource;
+    }
+
+    /**
+     * Directly sets fire state from a trusted source (e.g. server sync).
+     * Pass 0,0 to extinguish. Does not stack — overwrites.
+     */
+    public void syncFire(int turnsActive, int duration) {
+        this.fireTurnsActive = turnsActive;
+        this.fireDuration    = duration;
+        if (turnsActive == 0) this.fireSource = null;
     }
 
     /**

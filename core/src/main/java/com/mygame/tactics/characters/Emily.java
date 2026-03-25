@@ -15,11 +15,11 @@ public class Emily extends Character {
         super("Emily", portrait, Enums.CharClass.SUPPORT, Enums.CharType.ANGELIC, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.SPECIAL;
         this.originLocation = "Unknown";
-        this.baseMaxHealth = 33;
+        this.baseMaxHealth = 66;
         this.baseAtk = 0;
-        this.baseMag = 13;
-        this.baseArmor = 3;
-        this.baseCloak = 3;
+        this.baseMag = 20;
+        this.baseArmor = 0;
+        this.baseCloak = 0;
         this.baseSpeed = 733;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

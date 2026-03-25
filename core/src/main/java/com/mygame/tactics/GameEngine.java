@@ -52,6 +52,7 @@ public class GameEngine {
     
     public Array<EngineEvent> processNetwork(GameState state, NetworkAction na) {
         if (na == null || na.action == null) return new Array<>();
+        if (state == null) return new Array<>();
         if (state.activeUnit != null && na.playerId != state.activeUnit.team) return new Array<>();
         return process(state, na.action);
     }
@@ -62,6 +63,7 @@ public class GameEngine {
 
     private void processPreGame(GameState state, Action action, Array<EngineEvent> events) {
         if (state.activeUnit instanceof Billy && action instanceof Action.ChooseDisguiseAction) {
+            // Set the disguise but stay on Billy's slot — he still needs to deploy.
             Action.ChooseDisguiseAction da = (Action.ChooseDisguiseAction) action;
             Array<Character> teammates = (state.activeUnit.team == 1) ? state.team1 : state.team2;
             for (Character ally : teammates) {
@@ -70,9 +72,11 @@ public class GameEngine {
                     break;
                 }
             }
-            processNextSetupCharacter(state, events);
+            calculateMovementRange(state); // refresh deployment tile highlights
 
         } else if (state.activeUnit instanceof Billy && action instanceof Action.DeployAction) {
+            // Require disguise to be chosen before deploying.
+            if (((Billy) state.activeUnit).disguisedAs == null) return;
             Action.DeployAction da = (Action.DeployAction) action;
             boolean isTeam1  = (state.activeUnit.team == 1);
             boolean validRow = isTeam1 ? (da.targetY <= 1) : (da.targetY >= 7);
@@ -96,24 +100,23 @@ public class GameEngine {
             if (validCell) {
                 state.board.addCharacter(state.activeUnit, da.targetX, da.targetY);
                 state.activeUnit.hasDeployed = true;
-                if (state.activeUnit instanceof Mason) ((Mason) state.activeUnit).hasDeployed = true;
                 processNextSetupCharacter(state, events);
             }
         } else if (state.activeUnit.getCharClass() != Enums.CharClass.STATUE
-			        && !(state.activeUnit instanceof Billy)
-			        && action instanceof Action.DeployAction) {
-			 Action.DeployAction da = (Action.DeployAction) action;
-			 boolean isTeam1  = (state.activeUnit.team == 1);
-			 // Team 1 limited to rows 0-1, Team 2 limited to rows 7-8
-			 boolean validRow = isTeam1 ? (da.targetY <= 1) : (da.targetY >= 7);
-			 boolean validCell = state.board.isValid(da.targetX, da.targetY)
-			                     && validRow
-			                     && state.board.getCharacterAt(da.targetX, da.targetY) == null;
-			 if (validCell) {
-			     state.board.addCharacter(state.activeUnit, da.targetX, da.targetY);
-			     state.activeUnit.hasDeployed = true;
-			     processNextSetupCharacter(state, events);
-			 }	
+                && !(state.activeUnit instanceof Billy)
+                && action instanceof Action.DeployAction) {
+            Action.DeployAction da = (Action.DeployAction) action;
+            boolean isTeam1  = (state.activeUnit.team == 1);
+            // Team 1 limited to rows 0-1, Team 2 limited to rows 7-8
+            boolean validRow = isTeam1 ? (da.targetY <= 1) : (da.targetY >= 7);
+            boolean validCell = state.board.isValid(da.targetX, da.targetY)
+                                && validRow
+                                && state.board.getCharacterAt(da.targetX, da.targetY) == null;
+            if (validCell) {
+                state.board.addCharacter(state.activeUnit, da.targetX, da.targetY);
+                state.activeUnit.hasDeployed = true;
+                processNextSetupCharacter(state, events);
+            }
         }
     }
 
@@ -262,14 +265,11 @@ public class GameEngine {
         if (occupant != null && occupant != state.activeUnit) return; // Safety guard
 
         // Billy stealth on move:
-        // - Poison Trail state keeps him invisible indefinitely while moving.
         // - Snake In The Grass grants one free invisible move (isSnakeActive flag).
         // - Any other invisible move breaks stealth.
         if (state.activeUnit instanceof Billy && state.activeUnit.isInvisible()) {
             Billy _b = (Billy) state.activeUnit;
-            if (_b.isPoisonTrailActive) {
-                // Trail state: stay invisible, trail is laid below
-            } else if (_b.isSnakeActive) {
+            if (_b.isSnakeActive) {
                 // One free invisible move consumed — stealth persists, flag cleared
                 _b.isSnakeActive = false;
             } else {
@@ -311,12 +311,6 @@ public class GameEngine {
         state.reachableTiles.clear();
         state.selectedMoveTile = null;
         
-     // Desert — collapse the furthest tile from Haven after every move
-        if (state.boardConfig.collapseStyle == BoardConfig.CollapseStyle.DESERT_TILE) {
-            triggerDesertCollapse(state, events);
-            if (state.isGameOver()) return;
-        }
-
         // Post-move phase transition
         postMoveTransition(state, events);
     }
@@ -375,10 +369,13 @@ public class GameEngine {
             state.activeUnit.setUltActive(true);
         }
 
-        // Billy stealth break on ability use (Snake in the Grass grants stealth, so exempt it)
+        // Billy stealth break on ability use.
+        // Snake In The Grass is exempt (it grants stealth).
+        // Poisoned Fangs is exempt (it handles its own trail deactivation and reveal inside execute()).
         if (state.activeUnit instanceof Billy
                 && state.activeUnit.isInvisible()
-                && !abilityName.equals("Snake In The Grass")) {
+                && !abilityName.equals("Snake In The Grass")
+                && !abilityName.equals("Poisoned Fangs")) {
             state.activeUnit.setInvisible(false);
             events.add(new EngineEvent.PopupEvent("REVEALED", 0, "STEALTH",
                     state.activeUnit.x, state.activeUnit.y));
@@ -501,6 +498,16 @@ public class GameEngine {
             return;
         }
 
+        // --- Par 3 (Aevan — pull Haven one tile closer) ---
+        if (abilityName.equals("Par 3")) {
+            state.selectedAbility.execute(state.activeUnit, null, state, events,
+                    state.activeUnit.x, state.activeUnit.y);
+            pullHaven(state, events);
+            clearAbilitySelection(state);
+            transitionAfterAbility(state, events);
+            return;
+        }
+
         // --- Lick Wounds (Ghia — teleport to a clothes tile and heal 10) ---
         if (abilityName.equals("Lick Wounds")) {
             if (state.selectedTargetTile == null) return;
@@ -572,16 +579,7 @@ public class GameEngine {
         }
 
         // --- General case ---
-        int _billyHealthBefore = (target instanceof Billy) ? target.getHealth() : 0;
         state.selectedAbility.execute(state.activeUnit, target, state, events, tx, ty);
-
-        // If the target is Billy and took damage this ability, trigger Poison Trail.
-        // Abilities set target.health directly, so we snapshot health before execute()
-        // and check here. The trigger only fires if health actually decreased.
-        if (target instanceof Billy && target != state.activeUnit
-                && target.getHealth() < _billyHealthBefore) {
-            checkAndTriggerBillyTrail(state, target, events);
-        }
 
         // Process any deaths CombatBoard signalled via CharacterKilledEvent.
         // Abilities that call board.moveCharacter() internally (e.g. Evan's Tsunami,
@@ -690,11 +688,18 @@ public class GameEngine {
                 if (!c.isDead()) c.setCurrentWait(Math.max(0, c.getCurrentWait() - timePassed));
             state.activeUnit.resetWaitAfterTurn();
 
+            // Desert — collapse the furthest tile from Haven at the end of every turn
+            if (state.isBattle() && state.boardConfig.collapseStyle == BoardConfig.CollapseStyle.DESERT_TILE) {
+                triggerDesertCollapse(state, events);
+                if (state.isGameOver()) return;
+            }
+
          // Advance collapse timer
             if (state.isBattle() && state.haven != null) {
                 state.collapseWait -= timePassed;
 
-                if (!state.warningShownThisCycle && state.collapseWait <= 200f) {
+                if (!state.warningShownThisCycle && state.collapseWait <= 200f
+                        && state.boardConfig.collapseStyle != BoardConfig.CollapseStyle.DESERT_TILE) {
                     state.warningAlpha = 1.0f;
                     state.warningShownThisCycle = true;
                 }
@@ -702,7 +707,7 @@ public class GameEngine {
                 if (state.collapseWait <= 0f) {
                     if (state.boardConfig.collapseStyle == BoardConfig.CollapseStyle.WIND_PUSH) {
                         triggerWindPush(state, events);
-                    } else {
+                    } else if (state.boardConfig.collapseStyle == BoardConfig.CollapseStyle.RING) {
                         triggerRingCollapse(state, events);
                     }
                     if (state.isGameOver()) return;
@@ -742,6 +747,7 @@ public class GameEngine {
         state.selectedMoveTile   = null;
         state.selectedTargetTile = null;
         state.selectedAbility    = null;
+        state.targetableTiles.clear();
 
         // Grand Entrance
         if (state.activeUnit instanceof Jaxon && ((Jaxon) state.activeUnit).grandEntrancePending) {
@@ -878,7 +884,7 @@ public class GameEngine {
     // -----------------------------------------------------------------------
 
     /**
-     * If the target is Billy and Poison Trail hasn't triggered yet, trigger it now.
+     * If Billy takes damage while Poison Trail is active, deactivate it and reveal him.
      * Call this before every raw health reduction, regardless of damage source.
      */
     private void checkAndTriggerBillyTrail(GameState state, Character target,
@@ -886,8 +892,8 @@ public class GameEngine {
         if (target instanceof Billy) {
             Billy b = (Billy) target;
             if (!b.isPoisonTrailActive) {
-                b.triggerPoisonTrail(events);
-                state.wasBillyRevealedThisAction = true;
+                b.isPoisonTrailActive = true;
+                events.add(new EngineEvent.PopupEvent("POISON TRAIL!", 0, "POISON", b.x, b.y));
             }
         }
     }
@@ -923,6 +929,14 @@ public class GameEngine {
         events.add(new EngineEvent.PopupEvent("HEAL", actualHeal, "HEAL", target.x, target.y));
     }
 
+    public void applyStructureDamageAtTile(GameState state, int tx, int ty, int dmg, Array<EngineEvent> events) {
+        Tile t = state.board.getTile(tx, ty);
+        if (t != null && t.hasStructure()) {
+            t.applyStructureDamage(dmg);
+            events.add(new EngineEvent.PopupEvent("STRUCTURE", dmg, "OBJ", tx, ty));
+        }
+    }
+
     private void handleDeath(Character dead, GameState state, Array<EngineEvent> events) {
         // Not Even Close — Maxx revives as a zombie on first death.
         if (dead instanceof Maxx && !((Maxx) dead).zombieTriggered) {
@@ -933,7 +947,7 @@ public class GameEngine {
             maxx.baseSpeed = Math.max(1, maxx.baseSpeed / 2);
             maxx.setCurrentWait(maxx.baseSpeed); // reset wait to new faster cadence
             events.add(new EngineEvent.PopupEvent("NOT EVEN CLOSE!", 0, "STATUS", dead.x, dead.y));
-            events.add(new EngineEvent.PortraitChangeEvent(maxx, "Maxx_Zombie.png"));
+            events.add(new EngineEvent.PortraitChangeEvent(maxx, "maxx_zombie.png"));
             return; // abort death — Maxx lives on as a zombie
         }
 

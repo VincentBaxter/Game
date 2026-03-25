@@ -15,11 +15,11 @@ public class Aaron extends Character {
         super("Aaron", portrait, Enums.CharClass.MAGE, Enums.CharType.ANGELIC, Enums.Alliance.QUEEN);
         this.rarity         = Enums.Rarity.MYSTIC;
         this.originLocation = "Queen Resort";
-        this.baseMaxHealth = 40;
+        this.baseMaxHealth = 80;
         this.baseAtk = 0;
-        this.baseMag = 20;
-        this.baseArmor = 3;
-        this.baseCloak = 7;
+        this.baseMag = 30;
+        this.baseArmor = 0;
+        this.baseCloak = 4;
         this.baseSpeed = 900;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

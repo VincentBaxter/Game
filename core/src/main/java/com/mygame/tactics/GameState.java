@@ -104,11 +104,11 @@ public class GameState {
         allUnits.addAll(team2);
         for (Character c : allUnits) c.startBattle();
 
-        // Billy appears twice: first for disguise selection, then for deployment
+        // Billy gets one slot: he selects his disguise then immediately deploys in the same turn.
         for (Character c : allUnits) if (c instanceof Billy) setupQueue.add(c);
         for (Character c : allUnits) if (c.getCharClass() == Enums.CharClass.STATUE) setupQueue.add(c);
         for (Character c : allUnits) {
-            if (c.getCharClass() != Enums.CharClass.STATUE)
+            if (c.getCharClass() != Enums.CharClass.STATUE && !(c instanceof Billy))
                 setupQueue.add(c);
         }
         phase = setupQueue.size > 0 ? Phase.PRE_GAME : Phase.BATTLE;

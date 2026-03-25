@@ -16,11 +16,11 @@ public class Tyler extends Character {
         super("Tyler", portrait, Enums.CharClass.FIGHTER, Enums.CharType.ANGELIC, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.RARE;
         this.originLocation = "Unknown";
-        this.baseMaxHealth = 30;
-        this.baseAtk = 10;
-        this.baseMag = 10;
-        this.baseArmor = 10;
-        this.baseCloak = 10;
+        this.baseMaxHealth = 60;
+        this.baseAtk = 15;
+        this.baseMag = 15;
+        this.baseArmor = 7;
+        this.baseCloak = 7;
         this.baseSpeed = 888;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 1;

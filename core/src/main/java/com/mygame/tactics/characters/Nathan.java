@@ -22,11 +22,11 @@ public class Nathan extends Character {
         super("Nathan", portrait, Enums.CharClass.COLLECTOR, Enums.CharType.FLORA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.MYSTIC;
         this.originLocation = "Swamp";
-        this.baseMaxHealth = 35;
+        this.baseMaxHealth = 70;
         this.baseAtk = 0;
-        this.baseMag = 14;
-        this.baseArmor = 7;
-        this.baseCloak = 7;
+        this.baseMag = 21;
+        this.baseArmor = 4;
+        this.baseCloak = 4;
         this.baseSpeed = 1000;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

@@ -34,7 +34,13 @@ public class CombatScreen implements Screen {
 
     // Online mode — null in local play
     private final NetworkClient client;
-    private final int           myTeam; // 1 or 2 online; 0 in local play
+    private final int           myTeam;    // 1 or 2 online; 0 in local play
+    private       boolean       isRanked;  // true in ranked online matches
+    private       int           currentRound;
+    private       int           team1RoundWins;
+    private       int           team2RoundWins;
+    // Non-null when a ranked round/match has just ended (drives overlay rendering)
+    private       NetworkMessage rankedEndMsg = null;
 
     // -----------------------------------------------------------------------
     // Rendering-only
@@ -58,6 +64,12 @@ public class CombatScreen implements Screen {
     // Post-ability pause — blocks input briefly so the player can see the effect
     private float postAbilityDelay = 0f;
 
+    // Delay before showing the game-over overlay so the final action can settle
+    private float gameOverDisplayDelay = -1f; // -1 = not yet triggered
+
+    // Delay before auto-returning to menu after a ranked match ends
+    private float matchOverReturnDelay = -1f; // -1 = not active
+
     // -----------------------------------------------------------------------
     // Layout constants — single source of truth for all vertical zones
     // -----------------------------------------------------------------------
@@ -73,9 +85,7 @@ public class CombatScreen implements Screen {
     // -----------------------------------------------------------------------
     // Pre-game UI state (rendering-only)
     // -----------------------------------------------------------------------
-    private Character selectedDisguiseTarget  = null;
     private Array<Rectangle> disguiseOptionBounds = new Array<>();
-    private Rectangle acceptButtonBounds      = new Rectangle();
 
     // -----------------------------------------------------------------------
     // Constructors
@@ -101,10 +111,21 @@ public class CombatScreen implements Screen {
     public CombatScreen(Main game, GameState serverState,
                         Array<Character> localTeam1, Array<Character> localTeam2,
                         NetworkClient client, int myTeam) {
-        this.game   = game;
-        this.engine = new GameEngine();
-        this.client = client;
-        this.myTeam = myTeam;
+        this(game, serverState, localTeam1, localTeam2, client, myTeam, false, 0, 0, 0);
+    }
+
+    public CombatScreen(Main game, GameState serverState,
+                        Array<Character> localTeam1, Array<Character> localTeam2,
+                        NetworkClient client, int myTeam,
+                        boolean isRanked, int roundNumber, int t1Wins, int t2Wins) {
+        this.game            = game;
+        this.engine          = new GameEngine();
+        this.client          = client;
+        this.myTeam          = myTeam;
+        this.isRanked        = isRanked;
+        this.currentRound    = roundNumber;
+        this.team1RoundWins  = t1Wins;
+        this.team2RoundWins  = t2Wins;
 
         // Build a fresh GameState using the local (portrait-bearing) character objects.
         // Then sync all battle fields from the server state so positions, health, etc. match.
@@ -184,6 +205,28 @@ public class CombatScreen implements Screen {
             case GAME_OVER:
                 if (msg.gameState != null) applyServerState(msg.gameState);
                 break;
+            case RANKED_ROUND_OVER:
+                rankedEndMsg      = msg;
+                team1RoundWins    = msg.team1RoundWins;
+                team2RoundWins    = msg.team2RoundWins;
+                // Only start a new draft if the match is still ongoing
+                boolean matchOver = msg.team1RoundWins >= 2
+                        || msg.team2RoundWins >= 2
+                        || msg.roundNumber >= 3;
+                if (!matchOver) {
+                    Gdx.app.postRunnable(() -> {
+                        int nextRound = msg.roundNumber + 1;
+                        game.setScreen(new DraftScreen(game, client, myTeam, true,
+                                nextRound, msg.team1RoundWins, msg.team2RoundWins,
+                                msg.remainingPool));
+                    });
+                }
+                break;
+            case RANKED_MATCH_OVER:
+                rankedEndMsg = msg;
+                // Auto-return to menu after showing the result for 5 seconds
+                matchOverReturnDelay = 5f;
+                break;
             case OPPONENT_DISCONNECTED:
                 damagePopups.add(new DamagePopup("OPPONENT LEFT", 640, 360));
                 break;
@@ -210,6 +253,13 @@ public class CombatScreen implements Screen {
     }
 
     private void applyServerState(GameState incoming) {
+        // Clear all transient selection/highlight state from the previous action
+        state.selectedAbility    = null;
+        state.selectedMoveTile   = null;
+        state.selectedTargetTile = null;
+        state.targetableTiles.clear();
+        state.reachableTiles.clear();
+
         state.phase             = incoming.phase;
         state.turnPhase         = incoming.turnPhase;
         state.winnerTeam        = incoming.winnerTeam;
@@ -245,9 +295,33 @@ public class CombatScreen implements Screen {
                     myUnit.isFrozen     = inUnit.isFrozen;
                     myUnit.hasDeployed  = inUnit.hasDeployed;
                     myUnit.setCurrentWait(inUnit.getCurrentWait());
+                    myUnit.setUltUsed(inUnit.isUltUsed());
+                    myUnit.setUltActive(inUnit.isUltActive());
+
+                    // Billy: sync disguise choice (server is authoritative)
+                    if (myUnit instanceof Billy && inUnit instanceof Billy) {
+                        Billy myBilly = (Billy) myUnit;
+                        Billy inBilly = (Billy) inUnit;
+                        if (inBilly.disguisedAs == null) {
+                            myBilly.disguisedAs = null;
+                        } else {
+                            // Find the local Character object matching the server's disguise target
+                            for (Character c : state.allUnits) {
+                                if (c.getName().equals(inBilly.disguisedAs.getName())) {
+                                    myBilly.disguisedAs = c;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     break;
                 }
             }
+        }
+
+        // After syncing all units, refresh deployment highlights if still in pre-game
+        if (state.isPreGame() && state.activeUnit != null) {
+            engine.calculateMovementRange(state);
         }
 
         // Resolve activeUnit to local object (which has portrait)
@@ -288,12 +362,16 @@ public class CombatScreen implements Screen {
                 dest.setLockdown(src.isLockdown());
                 if (src.hasStructure()) dest.setStructureHP(src.getStructureHealth());
                 else dest.setStructureHP(0);
-                if (src.isOnFire()) dest.applyFire(null, src.getFireTurnsActive());
+                dest.syncFire(src.getFireTurnsActive(), src.getFireDuration());
             }
         }
 
         // Re-place local character objects (which have portraits) onto the board.
         rebuildBoardFromLocalUnits();
+
+        // Start the game-over display delay when we first see the game over state.
+        if (state.isGameOver() && gameOverDisplayDelay < 0f)
+            gameOverDisplayDelay = 3.0f;
 
         state.timeline.projectFutureEvents(state.allUnits);
         engine.calculateMovementRange(state);
@@ -356,6 +434,16 @@ public class CombatScreen implements Screen {
         if (postAbilityDelay > 0f) postAbilityDelay -= delta;
         if (!isAnimatingMove && postAbilityDelay <= 0f) handleInput();
 
+        if (gameOverDisplayDelay > 0f) gameOverDisplayDelay -= delta;
+
+        if (matchOverReturnDelay > 0f) {
+            matchOverReturnDelay -= delta;
+            if (matchOverReturnDelay <= 0f) {
+                game.setScreen(new MenuScreen(game));
+                return;
+            }
+        }
+
         ScreenUtils.clear(0.1f, 0.1f, 0.12f, 1);
         camera.update();
         game.batch.setProjectionMatrix(camera.combined);
@@ -384,7 +472,9 @@ public class CombatScreen implements Screen {
             game.font.setColor(Color.WHITE);
         }
 
-        if (state.isGameOver()) drawGameOverScreen(game.batch);
+        if (state.isGameOver() && gameOverDisplayDelay <= 0f) drawGameOverScreen(game.batch);
+        if (rankedEndMsg != null && rankedEndMsg.type == NetworkMessage.Type.RANKED_MATCH_OVER)
+            drawRankedMatchOverOverlay(game.batch);
 
         for (int i = damagePopups.size - 1; i >= 0; i--) {
             DamagePopup p = damagePopups.get(i);
@@ -409,6 +499,7 @@ public class CombatScreen implements Screen {
     // Input → Action dispatch
     // -----------------------------------------------------------------------
     private void handleInput() {
+        if (rankedEndMsg != null) return; // overlay handles its own input
         if (state.isGameOver()) return;
         if (state.activeUnit == null) return;
         // Online — only accept input on this player's turn
@@ -441,7 +532,7 @@ public class CombatScreen implements Screen {
             return;
         }
 
-        // PRE-GAME: Billy disguise selection (only when not yet deployed)
+        // PRE-GAME: Billy disguise selection — click a portrait to choose immediately
         if (state.isPreGame() && state.activeUnit instanceof Billy && !state.activeUnit.hasDeployed
                 && ((Billy) state.activeUnit).disguisedAs == null) {
             Array<Character> teammates = (state.activeUnit.team == 1) ? state.team1 : state.team2;
@@ -450,14 +541,11 @@ public class CombatScreen implements Screen {
                 if (ally == state.activeUnit) continue;
                 if (idx < disguiseOptionBounds.size
                         && disguiseOptionBounds.get(idx).contains(world.x, world.y)) {
-                    selectedDisguiseTarget = ally;
+                    dispatch(new Action.ChooseDisguiseAction(
+                            state.activeUnit.team, ally.getName()));
+                    return;
                 }
                 idx++;
-            }
-            if (selectedDisguiseTarget != null && acceptButtonBounds.contains(world.x, world.y)) {
-                dispatch(new Action.ChooseDisguiseAction(
-                        state.activeUnit.team, selectedDisguiseTarget.getName()));
-                selectedDisguiseTarget = null;
             }
             return;
         }
@@ -533,6 +621,12 @@ public class CombatScreen implements Screen {
                 for (Vector2 v : state.reachableTiles)
                     if ((int) v.x == gx && (int) v.y == gy) state.selectedMoveTile = v;
             } else if (state.selectedAbility != null) {
+                // Only accept clicks that land on a highlighted (valid) target tile
+                boolean validTarget = false;
+                for (Vector2 v : state.targetableTiles)
+                    if ((int) v.x == gx && (int) v.y == gy) { validTarget = true; break; }
+                if (!validTarget) return;
+
                 state.selectedTargetTile = new Vector2(gx, gy);
                 if (state.activeUnit instanceof Sean) {
                     Sean sean = (Sean) state.activeUnit;
@@ -629,7 +723,8 @@ public class CombatScreen implements Screen {
                 postAbilityDelay = Math.max(postAbilityDelay, are.duration);
 
             } else if (e instanceof EngineEvent.GameOverEvent) {
-                // state.phase is already GAME_OVER; renderer picks it up next frame.
+                // state.phase is already GAME_OVER; start a delay before showing the overlay.
+                gameOverDisplayDelay = 3.0f;
             } else if (e instanceof EngineEvent.PortraitChangeEvent) {
                 EngineEvent.PortraitChangeEvent pce = (EngineEvent.PortraitChangeEvent) e;
                 try {
@@ -654,6 +749,46 @@ public class CombatScreen implements Screen {
         game.font.draw(b, msg, 1280 / 2f - msg.length() * 14, 720 / 2f + 30);
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
+    }
+
+    private void drawRankedMatchOverOverlay(SpriteBatch b) {
+        b.setColor(0f, 0f, 0f, 0.85f);
+        b.draw(whitePixel, 0, 0, 1280, 720);
+        b.setColor(Color.WHITE);
+
+        int winner = rankedEndMsg.team1RoundWins > rankedEndMsg.team2RoundWins ? 1 : 2;
+        game.font.getData().setScale(2.8f);
+        game.font.setColor(winner == 1 ? Color.CYAN : Color.SALMON);
+        String title = "MATCH OVER — TEAM " + winner + " WINS!";
+        game.font.draw(b, title, 640f - title.length() * 15f, 500f);
+
+        game.font.getData().setScale(1.2f);
+        game.font.setColor(Color.LIGHT_GRAY);
+        String score = "Final Score: " + rankedEndMsg.team1RoundWins + " — " + rankedEndMsg.team2RoundWins;
+        game.font.draw(b, score, 640f - score.length() * 7.5f, 420f);
+
+        // Menu button
+        float bw = 280f, bh = 60f, bx = 640f - bw / 2f, by = 310f;
+        b.setColor(0.15f, 0.15f, 0.25f, 1f);
+        b.draw(whitePixel, bx, by, bw, bh);
+        b.setColor(Color.GOLD);
+        b.draw(whitePixel, bx, by, 4f, bh);
+        b.setColor(Color.WHITE);
+        game.font.getData().setScale(0.85f);
+        game.font.setColor(Color.WHITE);
+        game.font.draw(b, "BACK TO MENU", bx, by + bh / 2f + 12f, bw, 1, true);
+
+        game.font.getData().setScale(1.0f);
+        game.font.setColor(Color.WHITE);
+
+        // Handle click on menu button
+        if (Gdx.input.justTouched()) {
+            Vector3 world = camera.unproject(new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0));
+            if (world.x >= bx && world.x <= bx + bw && world.y >= by && world.y <= by + bh) {
+                client.disconnect();
+                game.setScreen(new MenuScreen(game));
+            }
+        }
     }
 
     private void drawBoard(SpriteBatch batch) {
@@ -682,6 +817,17 @@ public class CombatScreen implements Screen {
                 batch.draw(whitePixel, startX + x * tileSize, startY + y * tileSize,
                         tileSize - 1, tileSize - 1);
 
+                // Subtle team color tint on occupied tiles
+                if (c != null && !c.isDead()) {
+                    int vTeam = (client != null) ? myTeam : (state.activeUnit != null ? state.activeUnit.team : 1);
+                    if (!c.isInvisible() || c.team == vTeam) {
+                        if (c.team == 1) batch.setColor(0.2f, 0.7f, 1.0f, 0.2f);
+                        else             batch.setColor(1.0f, 0.3f, 0.15f, 0.2f);
+                        batch.draw(whitePixel, startX + x * tileSize, startY + y * tileSize, tileSize - 1, tileSize - 1);
+                        batch.setColor(Color.WHITE);
+                    }
+                }
+
                 // Crack overlay — only on tiles that are actually about to collapse
                 if (state.haven != null && state.collapseWait < 400f
                         && (state.pendingCollapseCols.size > 0 || state.pendingCollapseRows.size > 0)) {
@@ -699,7 +845,7 @@ public class CombatScreen implements Screen {
                         batch.setColor(Color.WHITE);
                     }
                 }
-                if (t.hasStructure() && !t.isPergola() && !t.isDrywall() && !t.isClothes())
+                if (t.hasStructure() && !t.isPergola() && !t.isDrywall() && !t.isClothes() && !t.isThorn())
                     batch.draw(wallTexture, startX+x*tileSize, startY+y*tileSize, tileSize, tileSize);
                 if (t.isPergola())    batch.draw(pergolaTileTexture, startX+x*tileSize, startY+y*tileSize, tileSize, tileSize);
                 if (t.isDrywall())    batch.draw(drywallTileTexture, startX+x*tileSize, startY+y*tileSize, tileSize, tileSize);
@@ -735,20 +881,19 @@ public class CombatScreen implements Screen {
                 if (state.selectedAbility != null) {
                     for (Vector2 tile : state.targetableTiles) {
                         if ((int)tile.x == x && (int)tile.y == y) {
-                            batch.setColor(state.selectedAbility.isHeal
-                                    ? new Color(0.2f, 1.0f, 0.2f, 0.4f)
-                                    : new Color(1.0f, 0.2f, 0.2f, 0.4f));
-                            batch.draw(whitePixel, startX+x*tileSize, startY+y*tileSize, tileSize-1, tileSize-1);
-                            if (state.selectedTargetTile != null
+                            boolean isSelected = state.selectedTargetTile != null
                                     && (int)state.selectedTargetTile.x == x
-                                    && (int)state.selectedTargetTile.y == y) {
-                                batch.setColor(Color.WHITE);
-                                float bx2 = startX+x*tileSize, by2 = startY+y*tileSize;
-                                batch.draw(whitePixel, bx2, by2, tileSize, 2);
-                                batch.draw(whitePixel, bx2, by2+tileSize-2, tileSize, 2);
-                                batch.draw(whitePixel, bx2, by2, 2, tileSize);
-                                batch.draw(whitePixel, bx2+tileSize-2, by2, 2, tileSize);
-                            }
+                                    && (int)state.selectedTargetTile.y == y;
+                            Color outlineColor = isSelected ? Color.WHITE
+                                    : (state.selectedAbility.isHeal
+                                            ? new Color(0.2f, 1.0f, 0.2f, 1f)
+                                            : new Color(1.0f, 0.2f, 0.2f, 1f));
+                            batch.setColor(outlineColor);
+                            float bx2 = startX+x*tileSize, by2 = startY+y*tileSize;
+                            batch.draw(whitePixel, bx2, by2, tileSize, 2);
+                            batch.draw(whitePixel, bx2, by2+tileSize-2, tileSize, 2);
+                            batch.draw(whitePixel, bx2, by2, 2, tileSize);
+                            batch.draw(whitePixel, bx2+tileSize-2, by2, 2, tileSize);
                         }
                     }
                 }
@@ -786,6 +931,11 @@ public class CombatScreen implements Screen {
 
                 if (chr == state.activeUnit && !isAnimatingMove)
                     drawY += Math.sin(stateTime * 6.0f) * 5.0f;
+                boolean isEnemy = state.activeUnit != null
+                        && chr.team != state.activeUnit.team;
+                if (state.isBattle() && state.turnPhase == GameState.TurnPhase.ABILITY
+                        && isEnemy && !isAnimatingMove)
+                    drawX += Math.sin(stateTime * 3.0f) * 3.0f;
                 if (chr == animatingUnit && isAnimatingMove) {
                     float vX = moveStart.x + (moveTarget.x - moveStart.x) * moveLerp;
                     float vY = moveStart.y + (moveTarget.y - moveStart.y) * moveLerp;
@@ -967,7 +1117,10 @@ public class CombatScreen implements Screen {
     private void drawTimeline(SpriteBatch b) {
         float startX = BOARD_START_X, startY = TIMELINE_Y, size = TIMELINE_H;
         Array<Timeline.TimelineEvent> events = state.timeline.getEvents();
-        for (int i = 0; i < Math.min(events.size, 7); i++) {
+        int count = Math.min(events.size, 9);
+
+        // Character portrait slots
+        for (int i = 0; i < count; i++) {
             Character actor = events.get(i).actor;
             b.setColor(actor.team == 1 ? Color.CYAN : Color.SALMON);
             b.draw(whitePixel, startX + i*(size+10), startY, size, size);
@@ -976,23 +1129,46 @@ public class CombatScreen implements Screen {
                     ? ((Billy)actor).disguisedAs.getPortrait() : actor.getPortrait();
             if (portrait != null) b.draw(portrait, startX + i*(size+10)+5, startY+5, size-10, size-10);
         }
-        float colX = startX + 7*(size+10);
-        float urgency = 1f - (state.collapseWait / 1000f);
-        b.setColor(1f, 0.4f - urgency*0.3f, 0f, 1f);
-        b.draw(whitePixel, colX, startY, size, size);
-        b.setColor(Color.WHITE);
-        game.font.getData().setScale(0.42f);
-        game.font.draw(b, "RING", colX+6, startY+42);
-        game.font.draw(b, "FALL", colX+6, startY+30);
-        game.font.setColor(urgency > 0.6f ? Color.RED : Color.YELLOW);
-        game.font.draw(b, (int)state.collapseWait+"", colX+8, startY+18);
-        game.font.getData().setScale(1.0f); game.font.setColor(Color.WHITE);
 
-        float barW = 9*(size+10)-10;
-        b.setColor(0.15f,0.15f,0.15f,1f);
-        b.draw(whitePixel, startX, startY-10, barW, 6);
-        b.setColor(urgency > 0.8f ? Color.RED : new Color(1f,0.5f,0.1f,1f));
-        b.draw(whitePixel, startX, startY-10, barW*(state.collapseWait/1000f), 6);
+        float barW = count * (size + 10) - 10;
+        b.setColor(0.15f, 0.15f, 0.15f, 1f);
+        b.draw(whitePixel, startX, startY - 10, barW, 6);
+
+        // Ring/wind fall divider — only for timed-collapse boards, not Desert
+        boolean showCollapse = state.isBattle() && state.boardConfig != null
+                && state.boardConfig.collapseStyle != BoardConfig.CollapseStyle.DESERT_TILE;
+        if (showCollapse) {
+            float urgency = Math.min(1f, 1f - (state.collapseWait / 1000f));
+            float r = 1f, g = Math.max(0f, 0.5f - urgency * 0.5f);
+
+            // Progress bar fill
+            b.setColor(urgency > 0.8f ? Color.RED : new Color(1f, 0.5f, 0.1f, 1f));
+            b.draw(whitePixel, startX, startY - 10, barW * (state.collapseWait / 1000f), 6);
+
+            // Find the first slot whose actor won't get a turn before the ring/wind falls
+            int ringFallBefore = count;
+            for (int i = 0; i < count; i++) {
+                if (events.get(i).actor.getCurrentWait() >= state.collapseWait) {
+                    ringFallBefore = i;
+                    break;
+                }
+            }
+
+            // Vertical divider in the gap before that slot
+            float divX = startX + ringFallBefore * (size + 10) - 7f;
+            b.setColor(r, g, 0f, 1f);
+            b.draw(whitePixel, divX, startY, 4, size);
+
+            // Small label above the divider
+            game.font.getData().setScale(0.32f);
+            game.font.setColor(r, g, 0f, 1f);
+            String label = state.boardConfig.collapseStyle == BoardConfig.CollapseStyle.WIND_PUSH
+                    ? "WIND" : "RING";
+            game.font.draw(b, label, divX - 2f, startY + size + 12f);
+            game.font.getData().setScale(1.0f);
+            game.font.setColor(Color.WHITE);
+        }
+
         b.setColor(Color.WHITE);
     }
 
@@ -1077,30 +1253,34 @@ public class CombatScreen implements Screen {
     }
 
     private void drawBillySelectionWindow(SpriteBatch b) {
-        float winW=600, winH=300, winX=(1280-winW)/2f, winY=(720-winH)/2f;
+        float winW=600, winH=260, winX=(1280-winW)/2f, winY=(720-winH)/2f;
         b.setColor(0.1f,0.1f,0.2f,0.95f);
         b.draw(whitePixel, winX, winY, winW, winH);
+        b.setColor(Color.GOLD);
+        b.draw(whitePixel, winX, winY+winH-2, winW, 2f);
         b.setColor(Color.WHITE);
-        game.font.draw(b, "BILLY: SELECT DISGUISE", winX+40, winY+winH-40);
+        game.font.getData().setScale(0.75f);
+        game.font.draw(b, "BILLY: SELECT DISGUISE", winX+40, winY+winH-20);
+        game.font.getData().setScale(0.50f);
+        game.font.setColor(0.7f, 0.7f, 0.8f, 1f);
+        game.font.draw(b, "Click a teammate to disguise as them", winX+40, winY+winH-46);
+        game.font.setColor(Color.WHITE);
+        game.font.getData().setScale(1.0f);
         disguiseOptionBounds.clear();
         Array<Character> teammates = (state.activeUnit.team==1) ? state.team1 : state.team2;
-        float iconSize=80, spacing=110, sx=winX+50, iy=winY+100;
+        float iconSize=80, spacing=110, sx=winX+50, iy=winY+60;
         for (Character ally : teammates) {
             if (ally == state.activeUnit) continue;
-            if (selectedDisguiseTarget == ally) {
-                b.setColor(Color.YELLOW);
-                b.draw(whitePixel, sx-5, iy-5, iconSize+10, iconSize+10);
-            }
             b.setColor(Color.WHITE);
             if (ally.getPortrait() != null) b.draw(ally.getPortrait(), sx, iy, iconSize, iconSize);
+            // name label below portrait
+            game.font.getData().setScale(0.45f);
+            game.font.setColor(Color.WHITE);
+            game.font.draw(b, ally.getName(), sx, iy - 4f);
+            game.font.getData().setScale(1.0f);
             disguiseOptionBounds.add(new Rectangle(sx, iy, iconSize, iconSize));
             sx += spacing;
         }
-        acceptButtonBounds.set(winX+winW-150, winY+30, 120, 45);
-        b.setColor(selectedDisguiseTarget != null ? Color.LIME : Color.GRAY);
-        b.draw(whitePixel, acceptButtonBounds.x, acceptButtonBounds.y,
-                acceptButtonBounds.width, acceptButtonBounds.height);
-        game.font.draw(b, "ACCEPT", acceptButtonBounds.x+30, acceptButtonBounds.y+32);
         b.setColor(Color.WHITE);
     }
 

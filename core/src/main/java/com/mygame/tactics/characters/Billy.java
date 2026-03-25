@@ -20,11 +20,11 @@ public class Billy extends Character {
         super("Billy", portrait, Enums.CharClass.CHAOS, Enums.CharType.FAUNA, Enums.Alliance.WITCH);
         this.rarity = Enums.Rarity.MYSTIC;
         this.originLocation = "Weird City";
-        this.baseMaxHealth = 60;
-        this.baseAtk = 5;
-        this.baseMag = 10;
-        this.baseArmor = 5;
-        this.baseCloak = 5;
+        this.baseMaxHealth = 120;
+        this.baseAtk = 8;
+        this.baseMag = 15;
+        this.baseArmor = 2;
+        this.baseCloak = 2;
         this.baseSpeed = 666;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 3;
@@ -39,6 +39,13 @@ public class Billy extends Character {
         startBattle();
     }
 
+    @Override
+    public void startBattle() {
+        super.startBattle();
+        // Poison Trail is inactive at game start — it triggers on first hit.
+        this.isPoisonTrailActive = false;
+    }
+
     /**
      * Reveals Billy's disguise and emits a popup event.
      */
@@ -51,17 +58,6 @@ public class Billy extends Character {
         }
     }
 
-    /**
-     * Called by GameEngine the first time Billy takes damage.
-     * Activates Poison Trail for the rest of the game.
-     */
-    public void triggerPoisonTrail(Array<EngineEvent> events) {
-        if (isPoisonTrailActive) return; // already triggered
-        isPoisonTrailActive = true;
-        reveal(events); // strip disguise
-        this.setInvisible(false);
-        events.add(new EngineEvent.PopupEvent("POISON TRAIL!", 0, "ACTIVE", this.x, this.y));
-    }
 
     // =========================================================
     // ABILITIES
@@ -85,9 +81,14 @@ public class Billy extends Character {
                 boolean wasInvisible = user.isInvisible();
                 int multiplier = wasInvisible ? 3 : 1;
 
-                // Break stealth and disguise on attack
+                // Using Fangs breaks disguise and stealth
                 if (user instanceof Billy) {
-                    ((Billy) user).reveal(events);
+                    Billy b = (Billy) user;
+                    b.reveal(events);
+                    if (!b.isPoisonTrailActive) {
+                        b.isPoisonTrailActive = true;
+                        events.add(new EngineEvent.PopupEvent("POISON TRAIL!", 0, "POISON", b.x, b.y));
+                    }
                     if (wasInvisible) {
                         user.setInvisible(false);
                         events.add(new EngineEvent.PopupEvent("REVEALED", 0, "STEALTH", user.x, user.y));
@@ -101,14 +102,19 @@ public class Billy extends Character {
                 int total     = finalPhys + finalMag;
                 total = CombatUtils.applyCrit(user, total, events, tx, ty);
 
-                target.health = Math.max(0, target.health - total);
                 events.add(new EngineEvent.PopupEvent("VENOM", total, "ATK", tx, ty));
+                state.engine.applyDamage(state, target, 0, 0, total, events);
             } else if (target == null && state.board.getTile(tx, ty) != null
                     && state.board.getTile(tx, ty).hasStructure()) {
                 boolean wasInvisible = user.isInvisible();
                 int multiplier = wasInvisible ? 3 : 1;
                 if (user instanceof Billy) {
-                    ((Billy) user).reveal(events);
+                    Billy b = (Billy) user;
+                    b.reveal(events);
+                    if (!b.isPoisonTrailActive) {
+                        b.isPoisonTrailActive = true;
+                        events.add(new EngineEvent.PopupEvent("POISON TRAIL!", 0, "POISON", b.x, b.y));
+                    }
                     if (wasInvisible) {
                         user.setInvisible(false);
                         events.add(new EngineEvent.PopupEvent("REVEALED", 0, "STEALTH", user.x, user.y));
@@ -144,14 +150,14 @@ public class Billy extends Character {
 
     /**
      * Poison Trail — passive ability, never clicked by the player.
-     * Shown in slot 3 as flavour text only; auto-triggers on first damage taken.
+     * Billy starts the game invisible with the trail active. It ends when he
+     * uses Poisoned Fangs or takes damage.
      */
     public static class PoisonTrail extends Ability {
         public PoisonTrail() {
             super("Poison Trail",
-                    "PASSIVE: Triggers the first time Billy takes damage. " +
-                    "Leaves a poison trail on every tile moved over for the rest of the game. " +
-                    "Immune to poison while active.",
+                    "PASSIVE: Triggers the first time Billy takes any damage. Every tile he " +
+                    "moves over is poisoned for the rest of the game. Immune to poison while active.",
                     0, false);
         }
 

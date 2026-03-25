@@ -111,4 +111,27 @@ public abstract class Action {
             this.boardType = boardType;
         }
     }
+
+    /**
+     * Sent immediately after connecting to tell the server which matchmaking
+     * queue to enter: casual (isRanked=false) or ranked (isRanked=true).
+     */
+    public static class JoinQueueAction extends Action {
+        public boolean ranked; // non-final for Kryo deserialization
+        public JoinQueueAction() { super(0); } // no-arg for Kryo
+        public JoinQueueAction(boolean ranked) {
+            super(0);
+            this.ranked = ranked;
+        }
+    }
+
+    /**
+     * Sent by DraftScreen when it first becomes active in a ranked match.
+     * The server replies with a fresh DRAFT_UPDATE so the client gets the
+     * correct filtered pool (locked chars excluded) regardless of timing.
+     */
+    public static class RequestDraftStateAction extends Action {
+        public RequestDraftStateAction() { super(0); }
+        public RequestDraftStateAction(int actingTeam) { super(actingTeam); }
+    }
 }

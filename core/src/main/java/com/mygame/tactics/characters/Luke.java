@@ -20,11 +20,11 @@ public class Luke extends Character {
         super("Luke", portrait, Enums.CharClass.ENGINEER, Enums.CharType.FLORA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.RARE;
         this.originLocation = "Act 2";
-        this.baseMaxHealth = 40;
-        this.baseAtk = 13;
-        this.baseMag = 5;
-        this.baseArmor = 5;
-        this.baseCloak = 10;
+        this.baseMaxHealth = 80;
+        this.baseAtk = 20;
+        this.baseMag = 8;
+        this.baseArmor = 2;
+        this.baseCloak = 7;
         this.baseSpeed = 800;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 3;

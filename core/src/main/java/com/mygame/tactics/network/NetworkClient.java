@@ -104,6 +104,16 @@ public class NetworkClient {
      *
      * @param action The game action to send.
      */
+    /**
+     * Tells the server which matchmaking queue to join.
+     * Must be called once after connect() succeeds.
+     */
+    public void joinQueue(boolean ranked) {
+        if (!connected) return;
+        NetworkAction na = new NetworkAction(null, 0, new Action.JoinQueueAction(ranked));
+        kryoClient.sendTCP(na);
+    }
+
     public void sendAction(Action action) {
         if (!connected) {
             System.err.println("Cannot send action — not connected.");

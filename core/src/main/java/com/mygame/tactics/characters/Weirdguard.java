@@ -17,11 +17,11 @@ public class Weirdguard extends Character {
         super("Weirdguard", portrait, Enums.CharClass.FIGHTER, Enums.CharType.FAUNA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.COMMON;
         this.originLocation = "Weird City";
-        this.baseMaxHealth = 40;
-        this.baseAtk = 10;
-        this.baseMag = 10;
-        this.baseArmor = 10;
-        this.baseCloak = 10;
+        this.baseMaxHealth = 80;
+        this.baseAtk = 15;
+        this.baseMag = 15;
+        this.baseArmor = 7;
+        this.baseCloak = 7;
         this.baseSpeed = 980;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

@@ -19,11 +19,11 @@ public class Evan extends Character {
         super("Evan", portrait, Enums.CharClass.FIGHTER, Enums.CharType.AQUA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.MYSTIC;
         this.originLocation = "Trade Hub";
-        this.baseMaxHealth = 50;
-        this.baseAtk = 12;
-        this.baseMag = 12;
-        this.baseArmor = 8;
-        this.baseCloak = 5;
+        this.baseMaxHealth = 100;
+        this.baseAtk = 18;
+        this.baseMag = 18;
+        this.baseArmor = 5;
+        this.baseCloak = 2;
         this.baseSpeed = 750;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 3;
@@ -112,25 +112,26 @@ public class Evan extends Character {
                 int nextX = victim.x + dx;
                 int nextY = victim.y + dy;
 
-                // Check for wall before moving — walls block the push and take damage.
-                if (state.board.isValid(nextX, nextY)) {
-                    Tile nextTile = state.board.getTile(nextX, nextY);
-                    if (nextTile != null && nextTile.hasStructure()) {
-                        nextTile.applyStructureDamage(30);
-                        events.add(new EngineEvent.PopupEvent("CRASH!", 30, "OBJ", nextX, nextY));
-                        if (nextTile.hasStructure()) break; // Wall survived — stop push.
-                        // Wall destroyed — fall through and move onto the now-clear tile.
-                    }
+                // Board edge — stop the push.
+                if (!state.board.isValid(nextX, nextY)) break;
 
-                    // Check for occupant — STATUEs block and deal damage, others block.
-                    Character occupant = state.board.getCharacterAt(nextX, nextY);
-                    if (occupant != null) {
-                        if (occupant.getCharClass() == Enums.CharClass.STATUE) {
-                            victim.health = Math.max(0, victim.health - 5);
-                            events.add(new EngineEvent.PopupEvent("BLOCKED", 5, "ATK", nextX, nextY));
-                        }
-                        break;
+                // Check for wall before moving — walls block the push and take damage.
+                Tile nextTile = state.board.getTile(nextX, nextY);
+                if (nextTile != null && nextTile.hasStructure()) {
+                    nextTile.applyStructureDamage(30);
+                    events.add(new EngineEvent.PopupEvent("CRASH!", 30, "OBJ", nextX, nextY));
+                    if (nextTile.hasStructure()) break; // Wall survived — stop push.
+                    // Wall destroyed — fall through and move onto the now-clear tile.
+                }
+
+                // Check for occupant — STATUEs block and deal damage, others block.
+                Character occupant = state.board.getCharacterAt(nextX, nextY);
+                if (occupant != null) {
+                    if (occupant.getCharClass() == Enums.CharClass.STATUE) {
+                        victim.health = Math.max(0, victim.health - 5);
+                        events.add(new EngineEvent.PopupEvent("BLOCKED", 5, "ATK", nextX, nextY));
                     }
+                    break;
                 }
 
                 // Delegate the actual move to board.moveCharacter().

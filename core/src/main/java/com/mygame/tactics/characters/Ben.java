@@ -16,10 +16,10 @@ public class Ben extends Character {
         super("Ben", portrait, Enums.CharClass.SNIPER, Enums.CharType.FAUNA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.RARE;
         this.originLocation = "Unknown";
-        this.baseMaxHealth = 50;
-        this.baseAtk = 15;
+        this.baseMaxHealth = 100;
+        this.baseAtk = 23;
         this.baseMag = 0;
-        this.baseArmor = 10;
+        this.baseArmor = 7;
         this.baseCloak = 0;
         this.baseSpeed = 930;
         this.baseSpeedReduction = 1.0;

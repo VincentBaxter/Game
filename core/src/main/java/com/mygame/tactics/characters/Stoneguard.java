@@ -16,11 +16,11 @@ public class Stoneguard extends Character {
         super("Stoneguard", portrait, Enums.CharClass.TANK, Enums.CharType.FLORA, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.COMMON;
         this.originLocation = "Trade Hub";
-        this.baseMaxHealth = 60;
-        this.baseAtk = 5;
+        this.baseMaxHealth = 120;
+        this.baseAtk = 8;
         this.baseMag = 0;
-        this.baseArmor = 12;
-        this.baseCloak = 15;
+        this.baseArmor = 9;
+        this.baseCloak = 12;
         this.baseSpeed = 1050;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

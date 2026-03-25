@@ -59,6 +59,7 @@ com.mygame.tactics.network          → Multiplayer server/client
 | Character | Class | Notable Mechanics |
 |-----------|-------|-------------------|
 | Aaron | — | — |
+| Aevan | SNIPER | Disc (magic attack range 4), Par 3 (pull Haven closer), Hole in One (set enemy HP to 1, once per game). |
 | Anna | — | — |
 | Ben | — | Lockdown ability |
 | Billy | ASSASSIN | Chooses a disguise before deploying. Two pre-game turns: disguise selection then deployment. Invisible/stealth mechanics. |
@@ -71,7 +72,7 @@ com.mygame.tactics.network          → Multiplayer server/client
 | Jaxon | — | — |
 | Lark | — | Two-step Wall of Fire ability |
 | Luke | ENGINEER | Places pergola tiles that grant range bonus |
-| Mason | ASSASSIN | Starts invisible. Should be hidden from enemy team after deployment. Take Flight movement. |
+| Mason | STATUE | Starts invisible. Should be hidden from enemy team after deployment. Lurker passive skips turn while invisible. Gargoyle Unleashed kills first adjacent enemy (once). Take Flight teleport. |
 | Maxx | FIGHTER | Not Even Close — revives as zombie on first death |
 | Nathan | — | — |
 | Sean | — | Two-step Painted Walls ability |

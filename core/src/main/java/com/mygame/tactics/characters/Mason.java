@@ -12,7 +12,6 @@ import com.mygame.tactics.GameState;
 
 public class Mason extends Character {
 
-    public boolean hasDeployed       = false;
     public boolean isTakeFlightActive = false;
     public boolean gargoyleTriggered  = false; // true once Gargoyle Unleashed has fired
 
@@ -20,11 +19,11 @@ public class Mason extends Character {
         super("Mason", portrait, Enums.CharClass.STATUE, Enums.CharType.WIND, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.CHAMPION;
         this.originLocation = "Director's Castle";
-        this.baseMaxHealth = 44;
-        this.baseAtk = 7;
+        this.baseMaxHealth = 88;
+        this.baseAtk = 11;
         this.baseMag = 0;
-        this.baseArmor = 10;
-        this.baseCloak = 10;
+        this.baseArmor = 7;
+        this.baseCloak = 7;
         this.baseSpeed = 500;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 0;
@@ -59,8 +58,8 @@ public class Mason extends Character {
                 if (CombatUtils.rollDodge(target, events, tx, ty)) return AbilityResult.END_TURN;
                 int finalPhys = Math.max(0, user.getAtk() - target.getArmor());
                 finalPhys = CombatUtils.applyCrit(user, finalPhys, events, tx, ty);
-                target.health = Math.max(0, target.health - finalPhys);
                 events.add(new EngineEvent.PopupEvent("CLAW", finalPhys, "ATK", tx, ty));
+                state.engine.applyDamage(state, target, 0, 0, finalPhys, events);
             } else if (target == null && state.board.getTile(tx, ty) != null
                     && state.board.getTile(tx, ty).hasStructure()) {
                 state.engine.applyStructureDamageAtTile(state, tx, ty, user.getAtk(), events);

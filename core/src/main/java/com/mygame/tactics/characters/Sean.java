@@ -21,11 +21,11 @@ public class Sean extends Character {
         super("Sean", portrait, Enums.CharClass.MAGE, Enums.CharType.FAUNA, Enums.Alliance.QUEEN);
         this.rarity = Enums.Rarity.CHAMPION;
         this.originLocation = "Weird City";
-        this.baseMaxHealth = 45;
-        this.baseAtk = 8;
-        this.baseMag = 12;
-        this.baseArmor = 1;
-        this.baseCloak = 9;
+        this.baseMaxHealth = 90;
+        this.baseAtk = 12;
+        this.baseMag = 18;
+        this.baseArmor = 0;
+        this.baseCloak = 6;
         this.baseSpeed = 800;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

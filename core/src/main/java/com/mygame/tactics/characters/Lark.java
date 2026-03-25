@@ -21,11 +21,11 @@ public class Lark extends Character {
         super("Lark", portrait, Enums.CharClass.CHAOS, Enums.CharType.FIRE, Enums.Alliance.WITCH);
         this.rarity = Enums.Rarity.MYSTIC;
         this.originLocation = "Mountain";
-        this.baseMaxHealth = 49;
-        this.baseAtk = 100;
-        this.baseMag = 8;
-        this.baseArmor = 7;
-        this.baseCloak = 7;
+        this.baseMaxHealth = 98;
+        this.baseAtk = 150;
+        this.baseMag = 12;
+        this.baseArmor = 4;
+        this.baseCloak = 4;
         this.baseSpeed = 685;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 2;

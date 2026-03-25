@@ -15,11 +15,11 @@ public class Speen extends Character {
         super("Speen", portrait, Enums.CharClass.CHAOS, Enums.CharType.AQUA, Enums.Alliance.QUEEN);
         this.rarity = Enums.Rarity.CHAMPION;
         this.originLocation = "Ice Town";
-        this.baseMaxHealth = 23;
-        this.baseAtk = 10;
+        this.baseMaxHealth = 46;
+        this.baseAtk = 15;
         this.baseMag = 0;
-        this.baseArmor = 15;
-        this.baseCloak = 15;
+        this.baseArmor = 12;
+        this.baseCloak = 12;
         this.baseSpeed = 600;
         this.baseSpeedReduction = 1.0;
         this.baseMoveDist = 3;
