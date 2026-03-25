@@ -965,20 +965,20 @@ public class CombatScreen implements Screen {
         if (!isRanked) return;
         float labelY  = TIMELINE_Y + TIMELINE_H / 2f + 8f;
         float boxSize = 16f, boxGap = 5f;
-        float boxY    = labelY - boxSize - 6f;  // just below the "TEAM 1/2" label
+        float boxY    = labelY - boxSize - 2f;  // vertically aligned with the label
 
-        // Team 1 (left sidebar)
+        // Team 1 (left sidebar) — to the right of "TEAM 1" text
         for (int i = 0; i < 2; i++) {
-            float bx = 18f + i * (boxSize + boxGap);
+            float bx = 90f + i * (boxSize + boxGap);
             if (i < team1RoundWins) b.setColor(Color.CYAN);
             else                    b.setColor(0.05f, 0.22f, 0.22f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);
         }
 
-        // Team 2 (right sidebar)
+        // Team 2 (right sidebar) — to the right of "TEAM 2" text
         float px = 1280 - SIDEBAR_W;
         for (int i = 0; i < 2; i++) {
-            float bx = px + 15f + i * (boxSize + boxGap);
+            float bx = px + 80f + i * (boxSize + boxGap);
             if (i < team2RoundWins) b.setColor(Color.SALMON);
             else                    b.setColor(0.25f, 0.08f, 0.06f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);

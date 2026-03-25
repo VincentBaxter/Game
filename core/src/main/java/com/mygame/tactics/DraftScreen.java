@@ -592,20 +592,20 @@ public class DraftScreen implements Screen {
      */
     private void drawRoundWins(SpriteBatch b) {
         if (!isRanked) return;
-        float boxSize = 16f, boxGap = 5f, boxY = 683f;  // below "TEAM 1/2" label at y=705
+        float boxSize = 16f, boxGap = 5f, boxY = 693f;  // vertically aligned with "TEAM 1/2" label at y=705
 
-        // Team 1 (left panel)
+        // Team 1 (left panel) — to the right of "TEAM 1" text
         for (int i = 0; i < 2; i++) {
-            float bx = 8f + i * (boxSize + boxGap);
+            float bx = 85f + i * (boxSize + boxGap);
             if (i < team1RoundWins) b.setColor(Color.CYAN);
             else                    b.setColor(0.05f, 0.22f, 0.22f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);
         }
 
-        // Team 2 (right panel)
+        // Team 2 (right panel) — to the right of "TEAM 2" text
         float px = 1280 - PANEL_W;
         for (int i = 0; i < 2; i++) {
-            float bx = px + 8f + i * (boxSize + boxGap);
+            float bx = px + 75f + i * (boxSize + boxGap);
             if (i < team2RoundWins) b.setColor(Color.SALMON);
             else                    b.setColor(0.25f, 0.08f, 0.06f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);
