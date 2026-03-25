@@ -46,6 +46,7 @@ public class Ghia extends Character {
     public static class Scratch extends Ability {
         public Scratch() {
             super("Scratch", "Basic attack. Deals ATK - ARM damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override

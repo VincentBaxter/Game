@@ -44,6 +44,7 @@ public class Luke extends Character {
     public static class Hack extends Ability {
         public Hack() {
             super("Hack", "Basic attack. Deal ATK - ARM damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override
@@ -67,7 +68,8 @@ public class Luke extends Character {
     public static class HerbalMedicine extends Ability {
         public HerbalMedicine() {
             super("Herbal Medicine", "Heal an ally within 3 tiles for MAG HP.", 3, true);
-            this.isHeal = true;
+            this.isHeal   = true;
+            this.showHeal = true;
         }
 
         @Override

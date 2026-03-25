@@ -35,7 +35,8 @@ public class Aaron extends Character {
     public static class TouchOfGrace extends Ability {
         public TouchOfGrace() {
             super("Touch of Grace", "Heals an ally based on Magic stat.", 1, true);
-            this.isHeal = true;
+            this.isHeal   = true;
+            this.showHeal = true;
         }
 
         @Override
@@ -83,6 +84,7 @@ public class Aaron extends Character {
     public static class KillSecured extends Ability {
         public KillSecured() {
             super("Kill Secured", "Magic damage to enemies around ALL allies.", 0, false);
+            this.showMag = true;
         }
 
         @Override

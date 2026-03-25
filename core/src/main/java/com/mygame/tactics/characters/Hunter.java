@@ -43,6 +43,7 @@ public class Hunter extends Character {
     public static class Shiv extends Ability {
         public Shiv() {
             super("Shiv", "Deal ATK - ARM physical damage. (ATK: 20)", 1, true);
+            this.showAtk = true;
         }
 
         @Override

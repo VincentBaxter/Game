@@ -44,6 +44,7 @@ public class Maxx extends Character {
     public static class Trasher extends Ability {
         public Trasher() {
             super("Trasher", "Basic attack. Deals ATK - ARM damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override

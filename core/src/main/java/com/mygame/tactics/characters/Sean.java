@@ -45,6 +45,7 @@ public class Sean extends Character {
     public static class BrushWithDeath extends Ability {
         public BrushWithDeath() {
             super("Brush with Death", "Standard magic strike.", 3, true);
+            this.showMag = true;
         }
 
         @Override

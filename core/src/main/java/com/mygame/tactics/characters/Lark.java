@@ -50,6 +50,7 @@ public class Lark extends Character {
     public static class Fireball extends Ability {
         public Fireball() {
             super("Fireball", "Deal MAG + fireCount magic damage to all enemies within 2 tiles of target. +1 fireCount.", 3, true);
+            this.showMag = true;
         }
 
         @Override
@@ -137,7 +138,7 @@ public class Lark extends Character {
                 int fx = vertical ? ax     : ax + i;
                 int fy = vertical ? ay + i : ay;
                 if (state.board.isValid(fx, fy) && !state.board.isCollapsedAt(fx, fy)) {
-                    state.board.applyFire(fx, fy, user, duration);
+                    state.board.applyFire(fx, fy, duration);
                     events.add(new EngineEvent.PopupEvent("FIRE", 0, "WALL", fx, fy));
                 }
             }
@@ -175,7 +176,7 @@ public class Lark extends Character {
             for (int x = 0; x < state.board.getRows(); x++) {
                 for (int y = 0; y < state.board.getCols(); y++) {
                     if (!state.board.isCollapsedAt(x, y)) {
-                        state.board.applyFire(x, y, user, duration);
+                        state.board.applyFire(x, y, duration);
                         events.add(new EngineEvent.PopupEvent("FIRE", 0, "HELL", x, y));
                     }
                 }

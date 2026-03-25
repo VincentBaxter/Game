@@ -1110,6 +1110,15 @@ public class GameEngine {
 
         state.collapseCount++;
 
+        // All living characters gain a 1.2x ATK and MAG bonus after each ring collapse
+        for (Character c : state.allUnits) {
+            if (!c.isDead()) {
+                c.atk = (int)(c.atk * 1.2f);
+                c.mag = (int)(c.mag * 1.2f);
+            }
+        }
+        events.add(new EngineEvent.PopupEvent("POWER SURGE!", 0, "BUFF", hx, hy));
+
         if (state.havenOccupant != null && !state.havenOccupant.isDead()) {
             state.havenOccupant.atk++;
             state.havenOccupant.mag++;
@@ -1219,7 +1228,17 @@ public class GameEngine {
 	     // Grow push distance for next event
 	     state.windPushDistance++;
 	     state.collapseCount++; // keeps Haven bonus escalating same as other boards
-	
+
+	     // All living characters gain a 1.2x ATK and MAG bonus after each wind cycle
+	     for (Character c : state.allUnits) {
+	         if (!c.isDead()) {
+	             c.atk = (int)(c.atk * 1.2f);
+	             c.mag = (int)(c.mag * 1.2f);
+	         }
+	     }
+	     events.add(new EngineEvent.PopupEvent("POWER SURGE!", 0, "BUFF",
+	             state.haven.getX(), state.haven.getY()));
+
 	     if (state.havenOccupant != null && !state.havenOccupant.isDead()) {
 	         state.havenOccupant.atk++;
 	         state.havenOccupant.mag++;

@@ -46,6 +46,7 @@ public class Nathan extends Character {
     public static class KissOfLove extends Ability {
         public KissOfLove() {
             super("Kiss of Love", "Deal MAG magic damage to a target.", 2, true);
+            this.showMag = true;
         }
 
         @Override

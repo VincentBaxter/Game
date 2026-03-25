@@ -14,7 +14,7 @@ import com.mygame.tactics.Tile;
 public class GuardTower extends Character {
 
     public GuardTower(Texture portrait) {
-        super("Guard Tower", portrait, Enums.CharClass.STATUE, Enums.CharType.WIND, Enums.Alliance.QUEEN);
+        super("GuardTower", portrait, Enums.CharClass.STATUE, Enums.CharType.WIND, Enums.Alliance.QUEEN);
         this.rarity = Enums.Rarity.COMMON;
         this.originLocation = "Queen Capital";
         this.baseMaxHealth = 40;
@@ -37,6 +37,7 @@ public class GuardTower extends Character {
     public static class Volley extends Ability {
         public Volley() {
             super("Volley", "Basic ranged attack. Deals ATK damage.", 3, true);
+            this.showAtk = true;
         }
 
         @Override

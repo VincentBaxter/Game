@@ -23,8 +23,8 @@ public class CombatBoard {
         if (isValid(x, y)) tiles[x][y].setPoison(true);
     }
 
-    public void applyFire(int x, int y, Character source, int duration) {
-        if (isValid(x, y)) tiles[x][y].applyFire(source, duration);
+    public void applyFire(int x, int y, int duration) {
+        if (isValid(x, y)) tiles[x][y].applyFire(duration);
     }
 
     public void placeWall(int x, int y) {

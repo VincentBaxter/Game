@@ -14,7 +14,12 @@ public abstract class Ability {
     protected String  description;
     protected int     range;
     protected boolean needsTarget;
-    public    boolean isHeal = false;
+    public    boolean isHeal     = false;
+    public    boolean showAtk    = false;
+    public    boolean showMag    = false;
+    public    boolean showHeal   = false;
+    public    int     armorBuff  = 0;   // > 0 renders beige armor bonus
+    public    int     cloakBuff  = 0;   // > 0 renders blue cloak bonus
 
     public Ability(String name, String description, int range, boolean needsTarget) {
         this.name        = name;

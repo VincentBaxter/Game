@@ -48,6 +48,7 @@ public class Mason extends Character {
     public static class Claws extends Ability {
         public Claws() {
             super("Claws", "Basic physical strike. (ATK: 7)", 1, true);
+            this.showAtk = true;
         }
 
         @Override

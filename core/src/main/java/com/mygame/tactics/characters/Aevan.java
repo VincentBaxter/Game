@@ -40,6 +40,7 @@ public class Aevan extends Character {
     public static class Disc extends Ability {
         public Disc() {
             super("Disc", "Basic magic attack. Deals MAG - CLK damage. (MAG: 15)", 4, true);
+            this.showMag = true;
         }
 
         @Override

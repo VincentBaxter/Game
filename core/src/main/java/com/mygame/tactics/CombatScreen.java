@@ -81,6 +81,11 @@ public class CombatScreen implements Screen {
     private static final float SIDEBAR_W       = 370f;
     private static final float BOARD_START_X   = 380f;
     private static final float HP_BAR_H        = 18f;  // taller health bar
+    private static final Color STAT_ATK_COLOR   = new Color(0.95f, 0.25f, 0.25f, 1f);
+    private static final Color STAT_MAG_COLOR   = new Color(0.75f, 0.25f, 0.95f, 1f);
+    private static final Color STAT_HEAL_COLOR  = new Color(0.20f, 0.85f, 0.30f, 1f);
+    private static final Color STAT_ARMOR_COLOR = new Color(0.85f, 0.72f, 0.45f, 1f);
+    private static final Color STAT_CLOAK_COLOR = new Color(0.35f, 0.55f, 0.95f, 1f);
 
     // -----------------------------------------------------------------------
     // Pre-game UI state (rendering-only)
@@ -952,6 +957,36 @@ public class CombatScreen implements Screen {
         batch.setColor(Color.WHITE);
     }
 
+    /**
+     * Draws 2 small win-indicator boxes in each sidebar (ranked only).
+     * Filled = won that round; unfilled = not yet won.
+     */
+    private void drawRoundWins(SpriteBatch b) {
+        if (!isRanked) return;
+        float labelY  = TIMELINE_Y + TIMELINE_H / 2f + 8f;
+        float boxSize = 16f, boxGap = 5f;
+        float boxY    = labelY - boxSize - 6f;  // just below the "TEAM 1/2" label
+
+        // Team 1 (left sidebar)
+        for (int i = 0; i < 2; i++) {
+            float bx = 18f + i * (boxSize + boxGap);
+            if (i < team1RoundWins) b.setColor(Color.CYAN);
+            else                    b.setColor(0.05f, 0.22f, 0.22f, 1f);
+            b.draw(whitePixel, bx, boxY, boxSize, boxSize);
+        }
+
+        // Team 2 (right sidebar)
+        float px = 1280 - SIDEBAR_W;
+        for (int i = 0; i < 2; i++) {
+            float bx = px + 15f + i * (boxSize + boxGap);
+            if (i < team2RoundWins) b.setColor(Color.SALMON);
+            else                    b.setColor(0.25f, 0.08f, 0.06f, 1f);
+            b.draw(whitePixel, bx, boxY, boxSize, boxSize);
+        }
+
+        b.setColor(Color.WHITE);
+    }
+
     private void drawSidebars(SpriteBatch b) {
         // Sidebar backgrounds
         b.setColor(0.1f, 0.1f, 0.15f, 1f);
@@ -988,6 +1023,9 @@ public class CombatScreen implements Screen {
         float cardH2 = Math.min(cardSlot2 - 6f, 148f);
         float t2Y = cardAreaTop;
         for (Character c : state.team2) { drawMiniUnitCard(b, c, 912, t2Y, cardH2, getTurnHighlight(c)); t2Y -= cardSlot2; }
+
+        // --- Round win indicators (ranked only) ---
+        drawRoundWins(b);
 
         // --- Bottom-left info panel — matches ability button zone exactly ---
         if (state.selectedAbility != null) {
@@ -1193,6 +1231,10 @@ public class CombatScreen implements Screen {
             b.setColor(Color.WHITE);
 
             if (ab != null) {
+                boolean hasStats = ab.showAtk || ab.showMag || ab.showHeal
+                        || ab.armorBuff > 0 || ab.cloakBuff > 0;
+                float nameYShift = hasStats ? 10f : 0f;
+
                 String name = ab.getName().toUpperCase();
                 float maxScale = 0.62f, minScale = 0.34f;
                 game.font.setColor(locked ? Color.DARK_GRAY : (sel ? Color.CYAN : Color.WHITE));
@@ -1207,15 +1249,50 @@ public class CombatScreen implements Screen {
                             btnW * 0.88f / (longest * 7f)));
                     float lineH = 7f * scale * 4.8f;
                     game.font.getData().setScale(scale);
-                    float topY = BUTTON_Y + BUTTON_H / 2f + lineH * 0.55f;
+                    float topY = BUTTON_Y + BUTTON_H / 2f + lineH * 0.55f + nameYShift;
                     game.font.draw(b, l1, btnX, topY,        btnW, 1, false);
                     game.font.draw(b, l2, btnX, topY - lineH, btnW, 1, false);
                 } else {
                     float scale = Math.max(minScale, Math.min(maxScale,
                             btnW * 0.88f / (name.length() * 7f)));
                     game.font.getData().setScale(scale);
-                    float textY = BUTTON_Y + BUTTON_H / 2f + (7f * scale / 2f);
+                    float textY = BUTTON_Y + BUTTON_H / 2f + (7f * scale / 2f) + nameYShift;
                     game.font.draw(b, name, btnX, textY, btnW, 1, false);
+                }
+
+                // Stat hints below the ability name
+                if (hasStats && state.activeUnit != null) {
+                    int count = (ab.showAtk ? 1 : 0) + (ab.showMag ? 1 : 0)
+                              + (ab.showHeal ? 1 : 0)
+                              + (ab.armorBuff > 0 ? 1 : 0) + (ab.cloakBuff > 0 ? 1 : 0);
+                    float segW  = btnW / count;
+                    float statY = BUTTON_Y + 22f;
+                    int   slot  = 0;
+                    game.font.getData().setScale(0.38f);
+                    if (ab.showAtk) {
+                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_ATK_COLOR);
+                        game.font.draw(b, "ATK " + state.activeUnit.getAtk(), btnX + slot * segW, statY, segW, 1, false);
+                        slot++;
+                    }
+                    if (ab.showMag) {
+                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_MAG_COLOR);
+                        game.font.draw(b, "MAG " + state.activeUnit.getMag(), btnX + slot * segW, statY, segW, 1, false);
+                        slot++;
+                    }
+                    if (ab.showHeal) {
+                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_HEAL_COLOR);
+                        game.font.draw(b, "+" + state.activeUnit.getMag() + " HP", btnX + slot * segW, statY, segW, 1, false);
+                        slot++;
+                    }
+                    if (ab.armorBuff > 0) {
+                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_ARMOR_COLOR);
+                        game.font.draw(b, "+" + ab.armorBuff + " ARM", btnX + slot * segW, statY, segW, 1, false);
+                        slot++;
+                    }
+                    if (ab.cloakBuff > 0) {
+                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_CLOAK_COLOR);
+                        game.font.draw(b, "+" + ab.cloakBuff + " CLK", btnX + slot * segW, statY, segW, 1, false);
+                    }
                 }
 
                 game.font.getData().setScale(1.0f);

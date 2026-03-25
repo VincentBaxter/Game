@@ -40,6 +40,7 @@ public class Anna extends Character {
     public static class Punch extends Ability {
         public Punch() {
             super("Punch", "Basic attack. Deals ATK - ARM damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override
@@ -84,6 +85,7 @@ public class Anna extends Character {
             super("Full Strength",
                     "Deal 3x ATK damage to an enemy within 1 range. Once per game.",
                     1, true);
+            this.showAtk = true;
         }
 
         @Override

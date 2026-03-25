@@ -40,6 +40,7 @@ public class Brad extends Character {
     public static class Stab extends Ability {
         public Stab() {
             super("Stab", "Basic attack. Deals ATK damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override
@@ -63,6 +64,7 @@ public class Brad extends Character {
     public static class Att4570 extends Ability {
         public Att4570() {
             super("ATT .45-70", "Shoot an enemy for heavy ATK damage.", 4, true);
+            this.showAtk = true;
         }
 
         @Override

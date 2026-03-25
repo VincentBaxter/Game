@@ -41,6 +41,7 @@ public class Thomas extends Character {
     public static class NailGun extends Ability {
         public NailGun() {
             super("Nail Gun", "Basic attack. Deals ATK - ARM damage.", 2, true);
+            this.showAtk = true;
         }
 
         @Override

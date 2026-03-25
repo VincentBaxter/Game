@@ -39,7 +39,8 @@ public class Emily extends Character {
     public static class CouriersGrace extends Ability {
         public CouriersGrace() {
             super("Courier's Grace", "Heal a single ally within 1 range for MAG HP.", 1, true);
-            this.isHeal = true;
+            this.isHeal   = true;
+            this.showHeal = true;
         }
 
         @Override

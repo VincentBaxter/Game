@@ -79,7 +79,7 @@ public class GameServer {
     private boolean    waitingPlayerRanked = false;
 
     public GameServer() {
-        kryoServer = new Server(16384, 2048);
+        kryoServer = new Server(65536, 65536);
         engine     = new GameEngine();
         KryoRegistrar.register(kryoServer.getKryo());
     }

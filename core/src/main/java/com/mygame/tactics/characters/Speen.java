@@ -39,6 +39,8 @@ public class Speen extends Character {
     public static class Pads extends Ability {
         public Pads() {
             super("Pads", "Gain +1 Armor and +1 Cloak. Stacks on every use.", 0, false);
+            this.armorBuff = 1;
+            this.cloakBuff = 1;
         }
 
         @Override

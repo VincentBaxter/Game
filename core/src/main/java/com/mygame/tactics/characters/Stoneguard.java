@@ -40,6 +40,7 @@ public class Stoneguard extends Character {
     public static class Tumble extends Ability {
         public Tumble() {
             super("Tumble", "Basic attack. Deals ATK damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override
@@ -60,6 +61,8 @@ public class Stoneguard extends Character {
     public static class Harden extends Ability {
         public Harden() {
             super("Harden", "Gain +5 Armor and +5 Cloak.", 0, false);
+            this.armorBuff = 5;
+            this.cloakBuff = 5;
         }
 
         @Override
@@ -81,6 +84,7 @@ public class Stoneguard extends Character {
     public static class Rockslide extends Ability {
         public Rockslide() {
             super("Rockslide", "Deal heavy ATK damage to all tiles in a chosen direction.", 0, false);
+            this.showAtk = true;
         }
 
         @Override

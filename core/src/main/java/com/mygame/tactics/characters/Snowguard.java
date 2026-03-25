@@ -40,6 +40,7 @@ public class Snowguard extends Character {
     public static class Snowball extends Ability {
         public Snowball() {
             super("Snowball", "Basic magic attack. Deals MAG - CLK damage.", 2, true);
+            this.showMag = true;
         }
 
         @Override

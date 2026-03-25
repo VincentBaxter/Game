@@ -41,6 +41,7 @@ public class Weirdguard extends Character {
     public static class Ram extends Ability {
         public Ram() {
             super("Ram", "Basic attack. Deals ATK damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override
@@ -64,6 +65,7 @@ public class Weirdguard extends Character {
     public static class Smash extends Ability {
         public Smash() {
             super("Smash", "Deal MAG damage to all surrounding characters.", 0, false);
+            this.showMag = true;
         }
 
         @Override

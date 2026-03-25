@@ -130,12 +130,12 @@ public class Tile {
     //                   Stacks additively when fire is applied to an already-burning tile.
     //
     // Lifecycle for duration=1:
-    //   applyFire(src, 1)   -> fireDuration=1, fireTurnsActive=1  [fire visible]
+    //   applyFire(1)        -> fireDuration=1, fireTurnsActive=1  [fire visible]
     //   startTurn damage    -> deals 1 true damage
-    //   endTurn  tickFire() -> fireDuration=0 -> extinguished      [fire gone]
+    //   startTurn tickFire() -> fireDuration=0 -> extinguished     [fire gone]
     //
     // Lifecycle for duration=2:
-    //   applyFire(src, 2)   -> fireDuration=2, fireTurnsActive=1
+    //   applyFire(2)        -> fireDuration=2, fireTurnsActive=1
     //   startTurn damage    -> deals 1 true damage
     //   endTurn  tickFire() -> fireDuration=1, fireTurnsActive=2
     //   startTurn damage    -> deals 2 true damage
@@ -143,15 +143,13 @@ public class Tile {
     //
     private int fireTurnsActive = 0;
     private int fireDuration    = 0;
-    private Character fireSource = null;
 
     /**
      * Apply (or stack) fire on this tile.
      * Duration adds on top of any existing duration so re-igniting always
      * extends rather than resets the fire.
      */
-    public void applyFire(Character source, int duration) {
-        this.fireSource = source;
+    public void applyFire(int duration) {
         this.fireDuration += duration;
         if (this.fireTurnsActive == 0) {
             this.fireTurnsActive = 1;
@@ -176,10 +174,6 @@ public class Tile {
         return fireDuration;
     }
 
-    public Character getFireSource() {
-        return fireSource;
-    }
-
     /**
      * Directly sets fire state from a trusted source (e.g. server sync).
      * Pass 0,0 to extinguish. Does not stack — overwrites.
@@ -187,7 +181,6 @@ public class Tile {
     public void syncFire(int turnsActive, int duration) {
         this.fireTurnsActive = turnsActive;
         this.fireDuration    = duration;
-        if (turnsActive == 0) this.fireSource = null;
     }
 
     /**
@@ -206,9 +199,7 @@ public class Tile {
             // Duration exhausted — extinguish completely.
             fireDuration    = 0;
             fireTurnsActive = 0;
-            fireSource      = null;
         } else {
-            // Still has turns remaining — age the fire so damage escalates next turn.
             fireTurnsActive++;
         }
     }

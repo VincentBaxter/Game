@@ -36,6 +36,7 @@ public class Ben extends Character {
     public static class ServiceWeapon extends Ability {
         public ServiceWeapon() {
             super("Service Weapon", "Basic attack. Deals ATK - ARM damage.", 2, true);
+            this.showAtk = true;
         }
 
         @Override

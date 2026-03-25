@@ -41,7 +41,10 @@ public class Evan extends Character {
     // =========================================================
 
     public static class TridentRush extends Ability {
-        public TridentRush() { super("Trident Rush", "Basic physical strike.", 1, true); }
+        public TridentRush() {
+            super("Trident Rush", "Basic physical strike.", 1, true);
+            this.showAtk = true;
+        }
 
         @Override
         public AbilityResult execute(Character user, Character target,

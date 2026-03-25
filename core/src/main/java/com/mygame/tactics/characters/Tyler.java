@@ -40,6 +40,7 @@ public class Tyler extends Character {
     public static class Fighter extends Ability {
         public Fighter() {
             super("Fighter", "Basic attack. Deals ATK - ARM damage.", 2, true);
+            this.showAtk = true;
         }
 
         @Override
@@ -63,7 +64,8 @@ public class Tyler extends Character {
     public static class Lover extends Ability {
         public Lover() {
             super("Lover", "Heal an ally for MAG HP.", 2, true);
-            this.isHeal = true;
+            this.isHeal   = true;
+            this.showHeal = true;
         }
 
         @Override

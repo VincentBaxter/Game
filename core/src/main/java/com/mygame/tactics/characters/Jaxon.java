@@ -49,6 +49,7 @@ public class Jaxon extends Character {
     public static class Smash extends Ability {
         public Smash() {
             super("Smash", "Basic attack. Deals ATK damage.", 1, true);
+            this.showAtk = true;
         }
 
         @Override
@@ -72,6 +73,8 @@ public class Jaxon extends Character {
     public static class Block extends Ability {
         public Block() {
             super("Block", "Gain +2 Armor and +2 Cloak.", 0, false);
+            this.armorBuff = 2;
+            this.cloakBuff = 2;
         }
 
         @Override

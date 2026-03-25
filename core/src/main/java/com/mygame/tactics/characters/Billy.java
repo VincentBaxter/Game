@@ -69,6 +69,8 @@ public class Billy extends Character {
                     "Deal (ATK - ARM) physical + (MAG - CLK) magic damage. " +
                     "3x both components if Invisible. Breaks stealth. (ATK: 5, MAG: 10)",
                     1, true);
+            this.showAtk = true;
+            this.showMag = true;
         }
 
         @Override
