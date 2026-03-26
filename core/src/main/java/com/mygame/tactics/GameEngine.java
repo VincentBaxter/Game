@@ -80,8 +80,10 @@ public class GameEngine {
             Action.DeployAction da = (Action.DeployAction) action;
             boolean isTeam1  = (state.activeUnit.team == 1);
             boolean validRow = isTeam1 ? (da.targetY <= 1) : (da.targetY >= 7);
+            boolean notOuterRing = !isWindBoard(state)
+                    || (da.targetX > 0 && da.targetX < 8 && da.targetY > 0 && da.targetY < 8);
             boolean validCell = state.board.isValid(da.targetX, da.targetY)
-                                && validRow
+                                && validRow && notOuterRing
                                 && state.board.getCharacterAt(da.targetX, da.targetY) == null;
             if (validCell) {
                 state.board.addCharacter(state.activeUnit, da.targetX, da.targetY);
@@ -94,8 +96,10 @@ public class GameEngine {
             Action.DeployAction da = (Action.DeployAction) action;
             boolean isTeam1   = (state.activeUnit.team == 1);
             boolean validRow  = isTeam1 ? (da.targetY <= 4) : (da.targetY >= 4);
+            boolean notOuterRing = !isWindBoard(state)
+                    || (da.targetX > 0 && da.targetX < 8 && da.targetY > 0 && da.targetY < 8);
             boolean validCell = state.board.isValid(da.targetX, da.targetY)
-                                && validRow
+                                && validRow && notOuterRing
                                 && state.board.getCharacterAt(da.targetX, da.targetY) == null;
             if (validCell) {
                 state.board.addCharacter(state.activeUnit, da.targetX, da.targetY);
@@ -109,8 +113,10 @@ public class GameEngine {
             boolean isTeam1  = (state.activeUnit.team == 1);
             // Team 1 limited to rows 0-1, Team 2 limited to rows 7-8
             boolean validRow = isTeam1 ? (da.targetY <= 1) : (da.targetY >= 7);
+            boolean notOuterRing = !isWindBoard(state)
+                    || (da.targetX > 0 && da.targetX < 8 && da.targetY > 0 && da.targetY < 8);
             boolean validCell = state.board.isValid(da.targetX, da.targetY)
-                                && validRow
+                                && validRow && notOuterRing
                                 && state.board.getCharacterAt(da.targetX, da.targetY) == null;
             if (validCell) {
                 state.board.addCharacter(state.activeUnit, da.targetX, da.targetY);
@@ -220,6 +226,10 @@ public class GameEngine {
             state.isGrandEntranceMove = false;
             state.turnPhase = GameState.TurnPhase.MOVEMENT;
             calculateMovementRange(state);
+        } else if (state.activeUnit instanceof Billy && ((Billy) state.activeUnit).isSnakeActive) {
+            // Snake In The Grass granted this move — staying still ends the turn.
+            ((Billy) state.activeUnit).isSnakeActive = false;
+            endTurn(state, events);
         } else if (state.isFighterBonusMove
                 || state.activeUnit.getCharClass() == Enums.CharClass.SNIPER) {
             state.isFighterBonusMove = false;
@@ -270,8 +280,8 @@ public class GameEngine {
         if (state.activeUnit instanceof Billy && state.activeUnit.isInvisible()) {
             Billy _b = (Billy) state.activeUnit;
             if (_b.isSnakeActive) {
-                // One free invisible move consumed — stealth persists, flag cleared
-                _b.isSnakeActive = false;
+                // One free invisible move consumed — stealth persists.
+                // isSnakeActive is cleared in postMoveTransition so it can trigger end-turn.
             } else {
                 state.activeUnit.setInvisible(false);
                 events.add(new EngineEvent.PopupEvent("REVEALED", 0, "STEALTH",
@@ -322,7 +332,11 @@ public class GameEngine {
             return;
         }
 
-        if (state.activeUnit instanceof Billy && ((Billy) state.activeUnit).isPoisonTrailActive) {
+        if (state.activeUnit instanceof Billy && ((Billy) state.activeUnit).isSnakeActive) {
+            // Snake In The Grass granted this move — end the turn now.
+            ((Billy) state.activeUnit).isSnakeActive = false;
+            endTurn(state, events);
+        } else if (state.activeUnit instanceof Billy && ((Billy) state.activeUnit).isPoisonTrailActive) {
             // Trail active — move to ability phase so Billy can still use Fangs or Snake.
             state.turnPhase = GameState.TurnPhase.ABILITY;
         } else if (state.isFighterBonusMove
@@ -758,8 +772,10 @@ public class GameEngine {
                     state.activeUnit.x, state.activeUnit.y);
         }
 
-        // Haven occupant bonus
-        if (state.haven != null) {
+        // Haven occupant bonus — disabled on Desert map
+        boolean isDesert = state.boardConfig != null
+                && state.boardConfig.collapseStyle == BoardConfig.CollapseStyle.DESERT_TILE;
+        if (state.haven != null && !isDesert) {
             Character currentOcc = state.board.getCharacterAt(state.haven.getX(), state.haven.getY());
             if (currentOcc != state.havenOccupant) {
                 int bonus = state.collapseCount + 1;
@@ -1366,19 +1382,23 @@ public class GameEngine {
             for (int x = 0; x < 9; x++)
                 for (int y = 0; y < 9; y++) {
                     boolean validRow = isTeam1 ? (y <= 4) : (y >= 4);
-                    if (validRow && state.board.getCharacterAt(x, y) == null)
+                    boolean notOuter = !isWindBoard(state)
+                            || (x > 0 && x < 8 && y > 0 && y < 8);
+                    if (validRow && notOuter && state.board.getCharacterAt(x, y) == null)
                         state.reachableTiles.add(new Vector2(x, y));
                 }
             return;
         }
-        
+
         if (!unit.hasDeployed && unit.getCharClass() != Enums.CharClass.STATUE
                 && !(unit instanceof Billy)) {
             boolean isTeam1 = (unit.team == 1);
             for (int x = 0; x < 9; x++)
                 for (int y = 0; y < 9; y++) {
                     boolean validRow = isTeam1 ? (y <= 1) : (y >= 7);
-                    if (validRow && state.board.getCharacterAt(x, y) == null)
+                    boolean notOuter = !isWindBoard(state)
+                            || (x > 0 && x < 8 && y > 0 && y < 8);
+                    if (validRow && notOuter && state.board.getCharacterAt(x, y) == null)
                         state.reachableTiles.add(new Vector2(x, y));
                 }
             return;
@@ -1390,7 +1410,9 @@ public class GameEngine {
             for (int x = 0; x < 9; x++)
                 for (int y = 0; y < 9; y++) {
                     boolean validRow = isTeam1 ? (y <= 1) : (y >= 7);
-                    if (validRow && state.board.getCharacterAt(x, y) == null)
+                    boolean notOuter = !isWindBoard(state)
+                            || (x > 0 && x < 8 && y > 0 && y < 8);
+                    if (validRow && notOuter && state.board.getCharacterAt(x, y) == null)
                         state.reachableTiles.add(new Vector2(x, y));
                 }
             return;
@@ -1594,6 +1616,11 @@ public class GameEngine {
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    private boolean isWindBoard(GameState state) {
+        return state.boardConfig != null
+                && state.boardConfig.type == BoardConfig.BoardType.WIND;
+    }
 
     private void clearAbilitySelection(GameState state) {
         state.selectedAbility    = null;

@@ -14,7 +14,9 @@ public abstract class Ability {
     protected String  description;
     protected int     range;
     protected boolean needsTarget;
-    public    boolean isHeal     = false;
+    public    boolean isHeal             = false;
+    public    boolean isPassive          = false; // auto-triggered, never clicked by player
+    public    boolean isDirectionAbility = false; // range==0 but needs a direction tile click
     public    boolean showAtk    = false;
     public    boolean showMag    = false;
     public    boolean showHeal   = false;

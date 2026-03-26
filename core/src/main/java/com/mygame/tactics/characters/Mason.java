@@ -96,9 +96,10 @@ public class Mason extends Character {
     public static class GargoyleUnleashed extends Ability {
         public GargoyleUnleashed() {
             super("Gargoyle Unleashed",
-                    "PASSIVE: While invisible, instantly kill the first enemy that moves " +
+                    "While invisible, instantly kill the first enemy that moves " +
                     "adjacent to you. Revealed on trigger. Once per game.",
                     0, false);
+            this.isPassive = true;
         }
 
         @Override

@@ -107,6 +107,7 @@ public class Weirdguard extends Character {
     public static class BullCharge extends Ability {
         public BullCharge() {
             super("Bull Charge", "Charge 3 tiles in a direction. Push all characters in the path.", 0, false);
+            this.isDirectionAbility = true;
         }
 
         @Override

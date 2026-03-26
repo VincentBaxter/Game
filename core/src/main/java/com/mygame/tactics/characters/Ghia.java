@@ -96,9 +96,10 @@ public class Ghia extends Character {
     public static class ScaredyCat extends Ability {
         public ScaredyCat() {
             super("Scaredy Cat",
-                    "PASSIVE: At the start of the game, spawn 3 piles of clothes anywhere " +
+                    "At the start of the game, spawn 3 piles of clothes anywhere " +
                     "on the board. Ghia becomes invisible while standing on a pile.",
                     0, false);
+            this.isPassive = true;
         }
 
         @Override

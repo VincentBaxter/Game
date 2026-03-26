@@ -97,8 +97,9 @@ public class Maxx extends Character {
     public static class NotEvenClose extends Ability {
         public NotEvenClose() {
             super("Not Even Close",
-                    "PASSIVE: On death, revive as a zombie with 50% HP, -1 move, and 2x speed. Once per game.",
+                    "On death, revive as a zombie with 50% HP, -1 move, and 2x speed. Once per game.",
                     0, false);
+            this.isPassive = true;
         }
 
         @Override

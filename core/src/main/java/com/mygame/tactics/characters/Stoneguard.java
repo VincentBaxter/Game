@@ -85,6 +85,7 @@ public class Stoneguard extends Character {
         public Rockslide() {
             super("Rockslide", "Deal heavy ATK damage to all tiles in a chosen direction.", 0, false);
             this.showAtk = true;
+            this.isDirectionAbility = true;
         }
 
         @Override

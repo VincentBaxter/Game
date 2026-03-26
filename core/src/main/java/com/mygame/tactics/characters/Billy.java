@@ -158,9 +158,10 @@ public class Billy extends Character {
     public static class PoisonTrail extends Ability {
         public PoisonTrail() {
             super("Poison Trail",
-                    "PASSIVE: Triggers the first time Billy takes any damage. Every tile he " +
+                    "Triggers the first time Billy takes any damage. Every tile he " +
                     "moves over is poisoned for the rest of the game. Immune to poison while active.",
                     0, false);
+            this.isPassive = true;
         }
 
         @Override

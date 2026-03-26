@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
@@ -373,28 +374,34 @@ public class OnlineScreen implements Screen {
 
     private void drawConnecting(SpriteBatch b) {
         String dots = ".".repeat(dotCount);
+        GlyphLayout gl = new GlyphLayout();
         game.font.getData().setScale(0.85f);
         game.font.setColor(Color.GOLD);
         String msg = "CONNECTING" + dots;
-        game.font.draw(b, msg, 640f - msg.length() * 5.5f, FIELD_Y + 20f);
+        gl.setText(game.font, msg);
+        game.font.draw(b, msg, 640f - gl.width / 2f, FIELD_Y + 20f);
         game.font.setColor(0.60f, 0.60f, 0.70f, 1f);
         game.font.getData().setScale(0.55f);
-        game.font.draw(b, serverIp, 640f - serverIp.length() * 3.5f, FIELD_Y - 14f);
+        gl.setText(game.font, serverIp);
+        game.font.draw(b, serverIp, 640f - gl.width / 2f, FIELD_Y - 14f);
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
     }
 
     private void drawWaiting(SpriteBatch b) {
         String dots = ".".repeat(dotCount);
+        GlyphLayout gl = new GlyphLayout();
         game.font.getData().setScale(0.85f);
         game.font.setColor(isRanked ? new Color(1f, 0.5f, 0.1f, 1f) : Color.GOLD);
         String queue = isRanked ? "RANKED" : "CASUAL";
         String msg = "SEARCHING FOR " + queue + " OPPONENT" + dots;
-        game.font.draw(b, msg, 640f - msg.length() * 5.5f, FIELD_Y + 20f);
+        gl.setText(game.font, msg);
+        game.font.draw(b, msg, 640f - gl.width / 2f, FIELD_Y + 20f);
         game.font.setColor(0.60f, 0.60f, 0.70f, 1f);
         game.font.getData().setScale(0.55f);
-        String sub = "Connected to " + serverIp + " — waiting for a " + queue.toLowerCase() + " match";
-        game.font.draw(b, sub, 640f - sub.length() * 3.5f, FIELD_Y - 14f);
+        String sub = "Connected to " + serverIp + " \u2014 waiting for a " + queue.toLowerCase() + " match";
+        gl.setText(game.font, sub);
+        game.font.draw(b, sub, 640f - gl.width / 2f, FIELD_Y - 14f);
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
     }

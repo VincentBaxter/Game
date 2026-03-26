@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
@@ -69,6 +70,10 @@ public class CombatScreen implements Screen {
 
     // Delay before auto-returning to menu after a ranked match ends
     private float matchOverReturnDelay = -1f; // -1 = not active
+
+    // "YOUR TURN" flash — set when the active unit switches to myTeam in online play
+    private float     yourTurnFlash      = 0f;
+    private Character lastSeenActiveUnit = null;
 
     // -----------------------------------------------------------------------
     // Layout constants — single source of truth for all vertical zones
@@ -404,13 +409,12 @@ public class CombatScreen implements Screen {
 
         // Type icons
         for (Enums.CharType t : Enums.CharType.values()) {
-            String path = t.name().charAt(0) + t.name().substring(1).toLowerCase() + "_icon.png";
+            String path = t.name().toLowerCase() + "_icon.png";
             try { typeIcons.put(t, new Texture(path)); } catch (Exception ignored) {}
         }
         // Class icons
         for (Enums.CharClass cl : Enums.CharClass.values()) {
-            String raw = cl.name(); // e.g. FIGHTER, MAGE, ASSASSIN
-            String path = raw.charAt(0) + raw.substring(1).toLowerCase() + "_icon.png";
+            String path = cl.name().toLowerCase() + "_icon.png";
             try { classIcons.put(cl, new Texture(path)); } catch (Exception ignored) {}
         }
     }
@@ -438,6 +442,15 @@ public class CombatScreen implements Screen {
         // move animation is active.
         if (postAbilityDelay > 0f) postAbilityDelay -= delta;
         if (!isAnimatingMove && postAbilityDelay <= 0f) handleInput();
+
+        // Detect when it becomes my turn in online play and trigger the flash
+        if (client != null && state.activeUnit != lastSeenActiveUnit) {
+            if (state.activeUnit != null && state.activeUnit.team == myTeam) {
+                yourTurnFlash = 1.8f;
+            }
+            lastSeenActiveUnit = state.activeUnit;
+        }
+        if (yourTurnFlash > 0f) yourTurnFlash -= delta;
 
         if (gameOverDisplayDelay > 0f) gameOverDisplayDelay -= delta;
 
@@ -480,6 +493,18 @@ public class CombatScreen implements Screen {
         if (state.isGameOver() && gameOverDisplayDelay <= 0f) drawGameOverScreen(game.batch);
         if (rankedEndMsg != null && rankedEndMsg.type == NetworkMessage.Type.RANKED_MATCH_OVER)
             drawRankedMatchOverOverlay(game.batch);
+
+        // "YOUR TURN" flash overlay
+        if (yourTurnFlash > 0f) {
+            float alpha = Math.min(1f, yourTurnFlash * 1.5f); // quick fade-in, then fade out
+            game.font.getData().setScale(3.2f);
+            game.font.setColor(Color.CYAN.r, Color.CYAN.g, Color.CYAN.b, alpha);
+            String yt = "YOUR TURN";
+            GlyphLayout ytLayout = new GlyphLayout(game.font, yt);
+            game.font.draw(game.batch, yt, 640f - ytLayout.width / 2f, 420f);
+            game.font.getData().setScale(1.0f);
+            game.font.setColor(Color.WHITE);
+        }
 
         for (int i = damagePopups.size - 1; i >= 0; i--) {
             DamagePopup p = damagePopups.get(i);
@@ -607,7 +632,7 @@ public class CombatScreen implements Screen {
                     state.targetableTiles.clear();
                 } else {
                     state.selectedAbility = clicked;
-                    if (clicked.getRange() == 0) {
+                    if (clicked.getRange() == 0 && !clicked.isDirectionAbility) {
                         dispatch(new Action.AbilityAction(state.activeUnit.team, i, -1, -1));
                     } else {
                         engine.calculateTargetRange(state, clicked);
@@ -633,7 +658,8 @@ public class CombatScreen implements Screen {
                 if (!validTarget) return;
 
                 state.selectedTargetTile = new Vector2(gx, gy);
-                if (state.activeUnit instanceof Sean) {
+                String selAbilityName = state.selectedAbility.getName();
+                if (state.activeUnit instanceof Sean && selAbilityName.equals("Painted Walls")) {
                     Sean sean = (Sean) state.activeUnit;
                     if (sean.wallAnchor == null) {
                         // First click — set the anchor, then recalculate to show direction tiles
@@ -651,7 +677,7 @@ public class CombatScreen implements Screen {
                         sean.wallAnchor    = null;
                         sean.wallDirection = null;
                     }
-                } else if (state.activeUnit instanceof Lark) {
+                } else if (state.activeUnit instanceof Lark && selAbilityName.equals("Wall of Fire")) {
                     Lark lark = (Lark) state.activeUnit;
                     if (lark.wallOfFireAnchor == null) {
                         // First click — set the anchor, then recalculate to show direction tiles
@@ -669,7 +695,7 @@ public class CombatScreen implements Screen {
                         lark.wallOfFireAnchor    = null;
                         lark.wallOfFireDirection = null;
                     }
-                } else if (state.activeUnit instanceof Luke) {
+                } else if (state.activeUnit instanceof Luke && selAbilityName.equals("Pergolatory")) {
                     Luke luke = (Luke) state.activeUnit;
                     if (luke.pergolaAnchor == null) {
                         // First click — set the anchor corner, then recalculate to show
@@ -686,6 +712,13 @@ public class CombatScreen implements Screen {
                                 gx, gy));
                         luke.pergolaAnchor = null;
                     }
+                } else if (state.selectedAbility.isDirectionAbility) {
+                    // Direction-click ability (e.g. Bull Charge, Summon The Wind, Rockslide)
+                    // — one tile click is all that's needed; dispatch immediately.
+                    dispatch(new Action.AbilityAction(
+                            state.activeUnit.team,
+                            getAbilityIndex(state.selectedAbility),
+                            gx, gy));
                 }
             }
         }
@@ -815,8 +848,7 @@ public class CombatScreen implements Screen {
                 }
                 boolean isHaven = (state.haven != null
                         && x == state.haven.getX() && y == state.haven.getY());
-                if (c != null && c == state.activeUnit)  batch.setColor(0.5f, 0f, 0.5f, 1f);
-                else if (isHaven)                         batch.setColor(Color.GOLD);
+                if (isHaven)                              batch.setColor(Color.GOLD);
                 else if ((x + y) % 2 == 0)               batch.setColor(state.boardConfig.tileColorA);
                 else                                      batch.setColor(state.boardConfig.tileColorB);
                 batch.draw(whitePixel, startX + x * tileSize, startY + y * tileSize,
@@ -957,6 +989,11 @@ public class CombatScreen implements Screen {
         batch.setColor(Color.WHITE);
     }
 
+    /** True in online play when it is the opponent's turn (not ours). */
+    private boolean isOpponentTurn() {
+        return client != null && state.activeUnit != null && state.activeUnit.team != myTeam;
+    }
+
     /**
      * Draws 2 small win-indicator boxes in each sidebar (ranked only).
      * Filled = won that round; unfilled = not yet won.
@@ -967,18 +1004,17 @@ public class CombatScreen implements Screen {
         float boxSize = 16f, boxGap = 5f;
         float boxY    = labelY - boxSize - 2f;  // vertically aligned with the label
 
-        // Team 1 (left sidebar) — to the right of "TEAM 1" text
+        // Team 1 (left sidebar) — right-aligned against the sidebar's inner edge
         for (int i = 0; i < 2; i++) {
-            float bx = 90f + i * (boxSize + boxGap);
+            float bx = (SIDEBAR_W - 12f - boxSize) - (1 - i) * (boxSize + boxGap);
             if (i < team1RoundWins) b.setColor(Color.CYAN);
             else                    b.setColor(0.05f, 0.22f, 0.22f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);
         }
 
-        // Team 2 (right sidebar) — to the right of "TEAM 2" text
-        float px = 1280 - SIDEBAR_W;
+        // Team 2 (right sidebar) — right-aligned against the screen's right edge
         for (int i = 0; i < 2; i++) {
-            float bx = px + 80f + i * (boxSize + boxGap);
+            float bx = (1280f - 12f - boxSize) - (1 - i) * (boxSize + boxGap);
             if (i < team2RoundWins) b.setColor(Color.SALMON);
             else                    b.setColor(0.25f, 0.08f, 0.06f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);
@@ -1037,9 +1073,9 @@ public class CombatScreen implements Screen {
             game.font.draw(b, state.selectedAbility.getName().toUpperCase(),
                     22, BUTTON_Y + BUTTON_H - 8f);
             game.font.setColor(Color.WHITE);
-            game.font.getData().setScale(0.65f);
+            game.font.getData().setScale(0.75f);
             game.font.draw(b, state.selectedAbility.getDescription(),
-                    22, BUTTON_Y + BUTTON_H - 26f, SIDEBAR_W - 36f, -1, true);
+                    22, BUTTON_Y + BUTTON_H - 28f, SIDEBAR_W - 36f, -1, true);
         } else if (state.activeUnit != null) {
             game.font.getData().setScale(0.78f);
             game.font.draw(b, "ACTING: " + state.activeUnit.getName().toUpperCase(),
@@ -1215,6 +1251,8 @@ public class CombatScreen implements Screen {
         float buttonWidth = boardWidth / 3f;
         float padding     = 3f;
 
+        boolean dimmed = isOpponentTurn() || state.isMovementPhase();
+
         for (int i = 0; i < 3; i++) {
             Ability ab = (state.activeUnit != null) ? state.activeUnit.getAbility(i) : null;
             float btnX = BOARD_START_X + i * buttonWidth + padding;
@@ -1222,11 +1260,11 @@ public class CombatScreen implements Screen {
 
             boolean locked = (i==1 && state.activeUnit instanceof Hunter && state.activeUnit.isInvisible())
                           || (i==2 && state.activeUnit != null && state.activeUnit.isUltUsed());
-            boolean sel    = ab != null && state.selectedAbility == ab;
+            boolean sel    = !dimmed && ab != null && state.selectedAbility == ab;
 
-            if (locked)      b.setColor(0.08f, 0.08f, 0.10f, 1f);
-            else if (sel)    b.setColor(0.35f, 0.35f, 0.65f, 1f);
-            else             b.setColor(0.16f, 0.16f, 0.22f, 1f);
+            if (locked || dimmed) b.setColor(0.08f, 0.08f, 0.10f, 1f);
+            else if (sel)         b.setColor(0.35f, 0.35f, 0.65f, 1f);
+            else                  b.setColor(0.16f, 0.16f, 0.22f, 1f);
             b.draw(whitePixel, btnX, BUTTON_Y, btnW, BUTTON_H);
             b.setColor(Color.WHITE);
 
@@ -1235,9 +1273,17 @@ public class CombatScreen implements Screen {
                         || ab.armorBuff > 0 || ab.cloakBuff > 0;
                 float nameYShift = hasStats ? 10f : 0f;
 
+                // Active / Passive label at top of button
+                String typeLabel = ab.isPassive ? "PASSIVE" : "ACTIVE";
+                game.font.getData().setScale(0.36f);
+                if (locked || dimmed)      game.font.setColor(Color.DARK_GRAY);
+                else if (ab.isPassive)     game.font.setColor(0.75f, 0.40f, 0.90f, 1f);
+                else                       game.font.setColor(0.55f, 0.55f, 0.65f, 1f);
+                game.font.draw(b, typeLabel, btnX, BUTTON_Y + BUTTON_H - 6f, btnW, 1, false);
+
                 String name = ab.getName().toUpperCase();
                 float maxScale = 0.62f, minScale = 0.34f;
-                game.font.setColor(locked ? Color.DARK_GRAY : (sel ? Color.CYAN : Color.WHITE));
+                game.font.setColor((locked || dimmed) ? Color.DARK_GRAY : (sel ? Color.CYAN : Color.WHITE));
 
                 if (name.contains(" ")) {
                     int mid = name.lastIndexOf(' ', name.length() / 2 + 2);
@@ -1269,28 +1315,29 @@ public class CombatScreen implements Screen {
                     float statY = BUTTON_Y + 22f;
                     int   slot  = 0;
                     game.font.getData().setScale(0.38f);
+                    boolean greyStats = locked || dimmed;
                     if (ab.showAtk) {
-                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_ATK_COLOR);
+                        game.font.setColor(greyStats ? Color.DARK_GRAY : STAT_ATK_COLOR);
                         game.font.draw(b, "ATK " + state.activeUnit.getAtk(), btnX + slot * segW, statY, segW, 1, false);
                         slot++;
                     }
                     if (ab.showMag) {
-                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_MAG_COLOR);
+                        game.font.setColor(greyStats ? Color.DARK_GRAY : STAT_MAG_COLOR);
                         game.font.draw(b, "MAG " + state.activeUnit.getMag(), btnX + slot * segW, statY, segW, 1, false);
                         slot++;
                     }
                     if (ab.showHeal) {
-                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_HEAL_COLOR);
+                        game.font.setColor(greyStats ? Color.DARK_GRAY : STAT_HEAL_COLOR);
                         game.font.draw(b, "+" + state.activeUnit.getMag() + " HP", btnX + slot * segW, statY, segW, 1, false);
                         slot++;
                     }
                     if (ab.armorBuff > 0) {
-                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_ARMOR_COLOR);
+                        game.font.setColor(greyStats ? Color.DARK_GRAY : STAT_ARMOR_COLOR);
                         game.font.draw(b, "+" + ab.armorBuff + " ARM", btnX + slot * segW, statY, segW, 1, false);
                         slot++;
                     }
                     if (ab.cloakBuff > 0) {
-                        game.font.setColor(locked ? Color.DARK_GRAY : STAT_CLOAK_COLOR);
+                        game.font.setColor(greyStats ? Color.DARK_GRAY : STAT_CLOAK_COLOR);
                         game.font.draw(b, "+" + ab.cloakBuff + " CLK", btnX + slot * segW, statY, segW, 1, false);
                     }
                 }
@@ -1311,22 +1358,32 @@ public class CombatScreen implements Screen {
 
     private void drawActionTriggerButton(SpriteBatch batch) {
         float x = 930f, w = 350f;
-        if (state.isMovementPhase())            batch.setColor(0.2f, 0.4f, 0.2f, 1f);
+        if (isOpponentTurn())                   batch.setColor(0.10f, 0.10f, 0.10f, 1f);
+        else if (state.isMovementPhase())       batch.setColor(0.2f, 0.4f, 0.2f, 1f);
         else if (state.selectedAbility != null) batch.setColor(0.4f, 0.2f, 0.2f, 1f);
         else                                    batch.setColor(0.3f, 0.3f, 0.3f, 1f);
         batch.draw(whitePixel, x, BUTTON_Y, w, BUTTON_H);
         batch.setColor(Color.WHITE);
 
-        String label = "PASS TURN";
-        if (state.isMovementPhase())
+        String label;
+        if (isOpponentTurn()) {
+            label = "WAIT";
+            game.font.setColor(Color.DARK_GRAY);
+        } else if (state.isMovementPhase()) {
             label = (state.selectedMoveTile != null) ? "CONFIRM MOVE" : "STAY HERE";
-        else if (state.selectedAbility != null) {
+            game.font.setColor(Color.WHITE);
+        } else if (state.selectedAbility != null) {
             if (state.selectedAbility.getName().equals("Holy Light")) label = "CAST HOLY LIGHT";
             else label = state.selectedAbility.isHeal ? "EXECUTE HEAL" : "CONFIRM ATTACK";
+            game.font.setColor(Color.WHITE);
+        } else {
+            label = "PASS TURN";
+            game.font.setColor(Color.WHITE);
         }
         game.font.getData().setScale(0.85f);
         game.font.draw(batch, label, x, BUTTON_Y + BUTTON_H / 2f + 8f, w, 1, false);
         game.font.getData().setScale(1.0f);
+        game.font.setColor(Color.WHITE);
     }
 
     private void drawBillySelectionWindow(SpriteBatch b) {

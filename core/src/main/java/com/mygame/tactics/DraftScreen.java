@@ -7,10 +7,13 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import java.util.HashMap;
+import java.util.Map;
 import com.mygame.tactics.characters.Aevan;
 import com.mygame.tactics.characters.Aaron;
 import com.mygame.tactics.characters.Anna;
@@ -104,6 +107,8 @@ public class DraftScreen implements Screen {
     private final OrthographicCamera camera;
     private final FitViewport        viewport;
     private final Texture            whitePixel;
+    private final Map<Enums.CharType,  Texture> typeIcons  = new HashMap<>();
+    private final Map<Enums.CharClass, Texture> classIcons = new HashMap<>();
 
     // -----------------------------------------------------------------------
     // Draft state
@@ -187,6 +192,15 @@ public class DraftScreen implements Screen {
         pm.fill();
         whitePixel = new Texture(pm);
         pm.dispose();
+
+        for (Enums.CharType t : Enums.CharType.values()) {
+            String path = t.name().toLowerCase() + "_icon.png";
+            try { typeIcons.put(t, new Texture(path)); } catch (Exception ignored) {}
+        }
+        for (Enums.CharClass cl : Enums.CharClass.values()) {
+            String path = cl.name().toLowerCase() + "_icon.png";
+            try { classIcons.put(cl, new Texture(path)); } catch (Exception ignored) {}
+        }
 
         for (int i = 0; i < 3; i++) boardCardBounds[i] = new Rectangle();
 
@@ -347,6 +361,8 @@ public class DraftScreen implements Screen {
     @Override
     public void dispose() {
         whitePixel.dispose();
+        for (Texture t : typeIcons.values())  t.dispose();
+        for (Texture t : classIcons.values()) t.dispose();
         for (int i = 0; i < pool.size; i++) {
             Texture t = pool.get(i).getPortrait();
             if (t != null) t.dispose();
@@ -592,20 +608,19 @@ public class DraftScreen implements Screen {
      */
     private void drawRoundWins(SpriteBatch b) {
         if (!isRanked) return;
-        float boxSize = 16f, boxGap = 5f, boxY = 693f;  // vertically aligned with "TEAM 1/2" label at y=705
+        float boxSize = 16f, boxGap = 5f, boxY = 693f;
 
-        // Team 1 (left panel) — to the right of "TEAM 1" text
+        // Team 1 (left panel) — right-aligned against the panel's inner edge
         for (int i = 0; i < 2; i++) {
-            float bx = 85f + i * (boxSize + boxGap);
+            float bx = (PANEL_W - 12f - boxSize) - (1 - i) * (boxSize + boxGap);
             if (i < team1RoundWins) b.setColor(Color.CYAN);
             else                    b.setColor(0.05f, 0.22f, 0.22f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);
         }
 
-        // Team 2 (right panel) — to the right of "TEAM 2" text
-        float px = 1280 - PANEL_W;
+        // Team 2 (right panel) — right-aligned against the screen's right edge
         for (int i = 0; i < 2; i++) {
-            float bx = px + 75f + i * (boxSize + boxGap);
+            float bx = (1280f - 12f - boxSize) - (1 - i) * (boxSize + boxGap);
             if (i < team2RoundWins) b.setColor(Color.SALMON);
             else                    b.setColor(0.25f, 0.08f, 0.06f, 1f);
             b.draw(whitePixel, bx, boxY, boxSize, boxSize);
@@ -663,6 +678,21 @@ public class DraftScreen implements Screen {
         game.font.draw(b, "HP "  + c.getMaxHealth() + "  ATK " + c.getAtk(),   x + 88, y - 52f);
         game.font.draw(b, "MAG " + c.getMag()       + "  ARM " + c.getArmor(), x + 88, y - 70f);
         game.font.draw(b, "CLK " + c.getCloak()     + "  SPD " + c.getSpeed(), x + 88, y - 88f);
+
+        // Class + Type icons — right-aligned in the name row
+        float iconSize  = 20f;
+        float iconRight = x + w - 4f;
+        float iconY     = y - 22f;
+        Texture classIcon = classIcons.get(c.getCharClass());
+        Texture typeIcon  = typeIcons.get(c.getCharType());
+        b.setColor(Color.WHITE);
+        if (classIcon != null) {
+            b.draw(classIcon, iconRight - iconSize, iconY, iconSize, iconSize);
+            iconRight -= iconSize + 3f;
+        }
+        if (typeIcon != null) {
+            b.draw(typeIcon, iconRight - iconSize, iconY, iconSize, iconSize);
+        }
     }
 
     private void drawEmptySlot(SpriteBatch b, float x, float y, Color tc) {
@@ -747,19 +777,46 @@ public class DraftScreen implements Screen {
         b.draw(whitePixel, panelX, panelY, panelW, panelH);
         b.setColor(Color.WHITE);
 
-        String label;
+        game.font.getData().setScale(0.9f);
+        float textY = panelY + panelH - 10f;
+        GlyphLayout gl = new GlyphLayout();
+
+        String roundPrefix = (isRanked && roundNumber > 0) ? "ROUND " + roundNumber + "/3  |  " : "";
+        String mainLabel;
+        String teamChunk = null;
+        Color  teamColor = null;
+        String pickSuffix = null;
         if (isOnline() && !myTurn) {
-            label = "OPPONENT'S TURN  —  PICK " + (picksMade + 1) + " OF " + TOTAL_PICKS;
+            mainLabel = roundPrefix + "OPPONENT'S TURN  —  PICK " + (picksMade + 1) + " OF " + TOTAL_PICKS;
         } else {
             int teamPicks = (pickingTeam == 1) ? team1.size : team2.size;
-            label = "TEAM " + pickingTeam + "  —  PICK " + (teamPicks + 1) + " OF " + PICKS_PER_TEAM;
+            teamChunk  = "TEAM " + pickingTeam;
+            teamColor  = (pickingTeam == 1) ? Color.CYAN : Color.SALMON;
+            pickSuffix = "  \u2014  PICK " + (teamPicks + 1) + " OF " + PICKS_PER_TEAM;
+            mainLabel  = roundPrefix + teamChunk + pickSuffix;
         }
-        if (isRanked && roundNumber > 0) {
-            label = "ROUND " + roundNumber + "/3  |  " + label;
+
+        // Centre the full label, then draw each coloured segment at its exact position
+        gl.setText(game.font, mainLabel);
+        float x = 640 - gl.width / 2f;
+
+        if (teamChunk == null) {
+            game.font.setColor(Color.GOLD);
+            game.font.draw(b, mainLabel, x, textY);
+        } else {
+            if (!roundPrefix.isEmpty()) {
+                game.font.setColor(Color.GOLD);
+                game.font.draw(b, roundPrefix, x, textY);
+                gl.setText(game.font, roundPrefix);
+                x += gl.width;
+            }
+            game.font.setColor(teamColor);
+            game.font.draw(b, teamChunk, x, textY);
+            gl.setText(game.font, teamChunk);
+            x += gl.width;
+            game.font.setColor(Color.GOLD);
+            game.font.draw(b, pickSuffix, x, textY);
         }
-        game.font.getData().setScale(0.9f);
-        game.font.setColor(tc);
-        game.font.draw(b, label, 640 - label.length() * 6.2f, panelY + panelH - 10f);
 
         if (hoveredIndex >= 0 && hoveredIndex < pool.size && myTurn) {
             String hint = "Selecting: " + pool.get(hoveredIndex).getName().toUpperCase();

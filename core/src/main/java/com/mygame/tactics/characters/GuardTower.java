@@ -86,6 +86,7 @@ public class GuardTower extends Character {
     public static class SummonTheWind extends Ability {
         public SummonTheWind() {
             super("Summon The Wind", "Push all enemies 2 tiles in a chosen direction.", 0, false);
+            this.isDirectionAbility = true;
         }
 
         @Override
