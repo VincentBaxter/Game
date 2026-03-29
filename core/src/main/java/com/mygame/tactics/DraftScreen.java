@@ -103,6 +103,7 @@ public class DraftScreen implements Screen {
     private final int              roundNumber;  // current round (1–3) in ranked; 0 otherwise
     private       int              team1RoundWins;
     private       int              team2RoundWins;
+    private final String[]         teamNames;    // {"Team 1", "Team 2"} by default
 
     private final OrthographicCamera camera;
     private final FitViewport        viewport;
@@ -157,24 +158,31 @@ public class DraftScreen implements Screen {
 
     /** Local mode — no network. */
     public DraftScreen(Main game) {
-        this(game, null, 0, false, 0, 0, 0);
+        this(game, null, 0, false, 0, 0, 0, null, new String[]{"Team 1", "Team 2"});
     }
 
     /** Online casual mode — pass the connected NetworkClient and this player's team. */
     public DraftScreen(Main game, NetworkClient client, int myTeam) {
-        this(game, client, myTeam, false, 0, 0, 0);
+        this(game, client, myTeam, false, 0, 0, 0, null, new String[]{"Team 1", "Team 2"});
     }
 
     /** Online mode (casual or ranked, no pre-filtered pool). */
     public DraftScreen(Main game, NetworkClient client, int myTeam,
                        boolean isRanked, int roundNumber, int t1Wins, int t2Wins) {
-        this(game, client, myTeam, isRanked, roundNumber, t1Wins, t2Wins, null);
+        this(game, client, myTeam, isRanked, roundNumber, t1Wins, t2Wins, null, new String[]{"Team 1", "Team 2"});
     }
 
     /** Online mode — serverPool pre-filters the local pool for ranked round 2+. */
     public DraftScreen(Main game, NetworkClient client, int myTeam,
                        boolean isRanked, int roundNumber, int t1Wins, int t2Wins,
                        Array<String> serverPool) {
+        this(game, client, myTeam, isRanked, roundNumber, t1Wins, t2Wins, serverPool, new String[]{"Team 1", "Team 2"});
+    }
+
+    /** Full constructor — accepts custom team display names. */
+    public DraftScreen(Main game, NetworkClient client, int myTeam,
+                       boolean isRanked, int roundNumber, int t1Wins, int t2Wins,
+                       Array<String> serverPool, String[] teamNames) {
         this.game            = game;
         this.client          = client;
         this.myTeam          = myTeam;
@@ -182,6 +190,7 @@ public class DraftScreen implements Screen {
         this.roundNumber     = roundNumber;
         this.team1RoundWins  = t1Wins;
         this.team2RoundWins  = t2Wins;
+        this.teamNames       = teamNames;
 
         camera   = new OrthographicCamera();
         viewport = new FitViewport(1280, 720, camera);
@@ -406,7 +415,7 @@ public class DraftScreen implements Screen {
                 if (msg.gameState != null) {
                     game.setScreen(new CombatScreen(game, msg.gameState,
                             team1, team2, client, myTeam, isRanked,
-                            roundNumber, team1RoundWins, team2RoundWins));
+                            roundNumber, team1RoundWins, team2RoundWins, teamNames));
                 }
                 break;
 
@@ -595,7 +604,7 @@ public class DraftScreen implements Screen {
             waitingForOpponent = true;
             boardSelectPhase   = false;
         } else {
-            game.setScreen(new CombatScreen(game, team1, team2, config));
+            game.setScreen(new CombatScreen(game, team1, team2, config, teamNames));
         }
     }
 
@@ -641,7 +650,7 @@ public class DraftScreen implements Screen {
     private void drawTeamRosters(SpriteBatch b) {
         game.font.getData().setScale(0.8f);
         game.font.setColor(Color.CYAN);
-        game.font.draw(b, "TEAM 1", 15, 705);
+        game.font.draw(b, teamNames[0].toUpperCase(), 15, 705);
 
         float t1Y = 658f;
         for (Character c : team1)                          { drawRosterEntry(b, c, 8,           t1Y, Color.CYAN);   t1Y -= 152f; }
@@ -649,7 +658,7 @@ public class DraftScreen implements Screen {
 
         float px = 1280 - PANEL_W;
         game.font.setColor(Color.SALMON);
-        game.font.draw(b, "TEAM 2", px + 15, 705);
+        game.font.draw(b, teamNames[1].toUpperCase(), px + 15, 705);
 
         float t2Y = 658f;
         for (Character c : team2)                          { drawRosterEntry(b, c, px + 5, t2Y, Color.SALMON); t2Y -= 152f; }
@@ -790,7 +799,7 @@ public class DraftScreen implements Screen {
             mainLabel = roundPrefix + "OPPONENT'S TURN  —  PICK " + (picksMade + 1) + " OF " + TOTAL_PICKS;
         } else {
             int teamPicks = (pickingTeam == 1) ? team1.size : team2.size;
-            teamChunk  = "TEAM " + pickingTeam;
+            teamChunk  = teamNames[pickingTeam - 1].toUpperCase();
             teamColor  = (pickingTeam == 1) ? Color.CYAN : Color.SALMON;
             pickSuffix = "  \u2014  PICK " + (teamPicks + 1) + " OF " + PICKS_PER_TEAM;
             mainLabel  = roundPrefix + teamChunk + pickSuffix;

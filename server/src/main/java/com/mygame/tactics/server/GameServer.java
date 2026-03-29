@@ -74,9 +74,27 @@ public class GameServer {
     // Maps a gameId to its room
     private final Map<String, GameRoom> rooms = new HashMap<>();
 
-    // Waiting player and their ranked preference (set when JoinQueueAction arrives)
-    private Connection waitingPlayer      = null;
-    private boolean    waitingPlayerRanked = false;
+    // Lobby: all connected players not yet in a game room
+    private final Map<Integer, LobbyPlayer> lobbyPlayers = new HashMap<>();
+
+    // Ranked queue: lobby players who hit the fountain
+    private LobbyPlayer waitingInQueue = null;
+
+    // -----------------------------------------------------------------------
+    // Inner class — LobbyPlayer
+    // -----------------------------------------------------------------------
+
+    private static class LobbyPlayer {
+        final Connection connection;
+        String username      = "Player";
+        int x = 10, y = 10;
+        int modelType     = 0;
+        int skinColorIdx  = 0;
+        int shirtColorIdx = 0;
+        int pantsColorIdx = 0;
+
+        LobbyPlayer(Connection connection) { this.connection = connection; }
+    }
 
     public GameServer() {
         kryoServer = new Server(65536, 65536);
@@ -116,44 +134,25 @@ public class GameServer {
 
     private synchronized void onPlayerConnected(Connection connection) {
         System.out.println("Player connected: " + connection.getID());
-
-        if (waitingPlayer == null) {
-            waitingPlayer = connection;
-            System.out.println("Player " + connection.getID() + " is waiting for an opponent.");
-        } else {
-            // Second player — create a room using the waiting player's ranked preference
-            String gameId = UUID.randomUUID().toString();
-            GameRoom room = new GameRoom(gameId, waitingPlayer, connection, waitingPlayerRanked);
-            rooms.put(gameId, room);
-            connectionToRoom.put(waitingPlayer.getID(), room);
-            connectionToRoom.put(connection.getID(), room);
-
-            waitingPlayer       = null;
-            waitingPlayerRanked = false;
-
-            System.out.println("Game room created: " + gameId + " (ranked=" + room.isRanked + ")");
-
-            // Notify both players which team they are
-            room.player1.sendTCP(NetworkMessage.roomJoined(gameId, 1, room.isRanked));
-            room.player2.sendTCP(NetworkMessage.roomJoined(gameId, 2, room.isRanked));
-
-            // Send initial draft state so both clients have the authoritative pool
-            NetworkMessage draftStart = NetworkMessage.draftUpdate(
-                    gameId, room.pickingTeam, room.draftPool,
-                    room.team1Picks, room.team2Picks);
-            room.player1.sendTCP(draftStart);
-            room.player2.sendTCP(draftStart);
-        }
+        // Add to lobby — username will be set when LobbyJoinAction arrives
+        lobbyPlayers.put(connection.getID(), new LobbyPlayer(connection));
     }
 
     private synchronized void onPlayerDisconnected(Connection connection) {
         System.out.println("Player disconnected: " + connection.getID());
 
-        if (waitingPlayer != null && waitingPlayer.getID() == connection.getID()) {
-            waitingPlayer       = null;
-            waitingPlayerRanked = false;
+        // Remove from lobby
+        LobbyPlayer lp = lobbyPlayers.remove(connection.getID());
+        if (lp != null) {
+            // Cancel queue if waiting
+            if (waitingInQueue != null && waitingInQueue.connection.getID() == connection.getID()) {
+                waitingInQueue = null;
+            }
+            // Broadcast PLAYER_LEFT to remaining lobby members
+            broadcastLobby(NetworkMessage.playerLeft(lp.username), -1);
         }
 
+        // Handle in-room disconnect
         GameRoom room = connectionToRoom.remove(connection.getID());
         if (room != null) {
             Connection other = (room.player1.getID() == connection.getID())
@@ -167,6 +166,111 @@ public class GameServer {
         }
     }
 
+    /** Send a message to all lobby players except the one with the given connectionId (-1 = send to all). */
+    private void broadcastLobby(NetworkMessage msg, int excludeId) {
+        for (LobbyPlayer lp : lobbyPlayers.values()) {
+            if (lp.connection.getID() == excludeId) continue;
+            if (lp.connection.isConnected()) lp.connection.sendTCP(msg);
+        }
+    }
+
+    /** Build a WORLD_STATE snapshot of all current lobby players. */
+    private NetworkMessage buildWorldState() {
+        int n = lobbyPlayers.size();
+        String[] names  = new String[n];
+        int[]    xs     = new int[n];
+        int[]    ys     = new int[n];
+        int[]    models = new int[n];
+        int[]    skins  = new int[n];
+        int[]    shirts = new int[n];
+        int[]    pants  = new int[n];
+        int i = 0;
+        for (LobbyPlayer lp : lobbyPlayers.values()) {
+            names[i]  = lp.username;
+            xs[i]     = lp.x;
+            ys[i]     = lp.y;
+            models[i] = lp.modelType;
+            skins[i]  = lp.skinColorIdx;
+            shirts[i] = lp.shirtColorIdx;
+            pants[i]  = lp.pantsColorIdx;
+            i++;
+        }
+        return NetworkMessage.worldState(names, xs, ys, models, skins, shirts, pants);
+    }
+
+    // -----------------------------------------------------------------------
+    // Lobby handlers
+    // -----------------------------------------------------------------------
+
+    private void handleLobbyJoin(Connection connection, Action.LobbyJoinAction action) {
+        LobbyPlayer lp = lobbyPlayers.get(connection.getID());
+        if (lp == null) return;
+        lp.username      = action.username != null ? action.username : "Player";
+        lp.modelType     = action.modelType;
+        lp.skinColorIdx  = action.skinColorIdx;
+        lp.shirtColorIdx = action.shirtColorIdx;
+        lp.pantsColorIdx = action.pantsColorIdx;
+
+        System.out.println("Lobby join: " + lp.username + " (conn " + connection.getID() + ")");
+
+        // Send current world state to the joining player
+        connection.sendTCP(buildWorldState());
+
+        // Broadcast PLAYER_JOINED to everyone else
+        broadcastLobby(NetworkMessage.playerJoined(lp.username, lp.x, lp.y,
+                lp.modelType, lp.skinColorIdx, lp.shirtColorIdx, lp.pantsColorIdx),
+                connection.getID());
+    }
+
+    private void handleLobbyMove(Connection connection, Action.PlayerMoveAction action) {
+        LobbyPlayer lp = lobbyPlayers.get(connection.getID());
+        if (lp == null) return;
+        lp.x = action.x;
+        lp.y = action.y;
+        broadcastLobby(NetworkMessage.playerMoved(lp.username, lp.x, lp.y), connection.getID());
+    }
+
+    private void handleJoinQueue(Connection connection) {
+        LobbyPlayer lp = lobbyPlayers.get(connection.getID());
+        if (lp == null) return;
+
+        if (waitingInQueue == null) {
+            waitingInQueue = lp;
+            System.out.println(lp.username + " entered the ranked queue.");
+        } else {
+            // Match found — create a room
+            LobbyPlayer p1 = waitingInQueue;
+            LobbyPlayer p2 = lp;
+            waitingInQueue = null;
+
+            String gameId = UUID.randomUUID().toString();
+            GameRoom room = new GameRoom(gameId, p1.connection, p2.connection, true);
+            rooms.put(gameId, room);
+            connectionToRoom.put(p1.connection.getID(), room);
+            connectionToRoom.put(p2.connection.getID(), room);
+            lobbyPlayers.remove(p1.connection.getID());
+            lobbyPlayers.remove(p2.connection.getID());
+
+            System.out.println("Ranked room created: " + gameId
+                    + " — " + p1.username + " vs " + p2.username);
+
+            // Broadcast PLAYER_LEFT for both players leaving the lobby
+            broadcastLobby(NetworkMessage.playerLeft(p1.username), -1);
+            broadcastLobby(NetworkMessage.playerLeft(p2.username), -1);
+
+            // Notify both players of their team assignments
+            p1.connection.sendTCP(NetworkMessage.roomJoined(gameId, 1, true));
+            p2.connection.sendTCP(NetworkMessage.roomJoined(gameId, 2, true));
+
+            // Send initial draft state
+            NetworkMessage draftStart = NetworkMessage.draftUpdate(
+                    gameId, room.pickingTeam, room.draftPool,
+                    room.team1Picks, room.team2Picks);
+            p1.connection.sendTCP(draftStart);
+            p2.connection.sendTCP(draftStart);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Action processing
     // -----------------------------------------------------------------------
@@ -174,12 +278,19 @@ public class GameServer {
     private synchronized void onActionReceived(Connection connection, NetworkAction na) {
         GameRoom room = connectionToRoom.get(connection.getID());
 
-        // Pre-room: capture the ranked preference sent with JoinQueueAction
+        // --- Lobby actions (handled before a room exists) ---
         if (room == null) {
+            if (na.action instanceof Action.LobbyJoinAction) {
+                handleLobbyJoin(connection, (Action.LobbyJoinAction) na.action);
+                return;
+            }
+            if (na.action instanceof Action.PlayerMoveAction) {
+                handleLobbyMove(connection, (Action.PlayerMoveAction) na.action);
+                return;
+            }
             if (na.action instanceof Action.JoinQueueAction) {
-                waitingPlayerRanked = ((Action.JoinQueueAction) na.action).ranked;
-                System.out.println("Player " + connection.getID()
-                        + " queued as " + (waitingPlayerRanked ? "RANKED" : "CASUAL"));
+                handleJoinQueue(connection);
+                return;
             }
             return;
         }
@@ -211,10 +322,6 @@ public class GameServer {
         if (action instanceof Action.RequestDraftStateAction) {
             handleRequestDraftState(connection, room);
             return;
-        }
-
-        if (action instanceof Action.JoinQueueAction) {
-            return; // Already matched; nothing more to do
         }
 
         // --- Battle/pregame phase actions — require initialized GameState ---

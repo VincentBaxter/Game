@@ -3,6 +3,7 @@ package com.mygame.tactics;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -30,7 +31,7 @@ import com.badlogic.gdx.InputAdapter;
  */
 public class OnlineScreen implements Screen {
 
-    private enum State { ENTERING_IP, CONNECTING, WAITING, ERROR }
+    private enum State { ENTERING_IP, CONNECTING, ERROR }
 
     // -----------------------------------------------------------------------
     // Layout
@@ -41,13 +42,8 @@ public class OnlineScreen implements Screen {
     private static final float FIELD_Y  = 310f;
     private static final float BTN_W    = 220f;
     private static final float BTN_H    = 60f;
-    private static final float BTN_GAP  = 20f;
-    // Two side-by-side buttons: CASUAL (left) and RANKED (right)
-    private static final float CASUAL_X = (1280f - (BTN_W * 2 + BTN_GAP)) / 2f;
-    private static final float RANKED_X = CASUAL_X + BTN_W + BTN_GAP;
+    private static final float BTN_X    = (1280f - BTN_W) / 2f;
     private static final float BTN_Y    = FIELD_Y - BTN_H - 20f;
-    // Legacy alias used by the error-state retry button
-    private static final float BTN_X    = CASUAL_X;
 
     // -----------------------------------------------------------------------
     // Fields
@@ -57,28 +53,30 @@ public class OnlineScreen implements Screen {
     private final FitViewport        viewport;
     private final Texture            whitePixel;
     private final NetworkClient      client;
+    final         PlayerAppearance   appearance;
 
     private State  state        = State.ENTERING_IP;
     private String serverIp     = "";
     private String errorMessage = "";
-    private float  dotTimer     = 0f; // drives the "..." animation while waiting
+    private float  dotTimer     = 0f;
     private int    dotCount     = 0;
-    private boolean casualHovered = false;
-    private boolean rankedHovered = false;
-    private boolean backHovered   = false;
-    private boolean isRanked      = false; // which queue the player chose
+    private boolean connectHovered = false;
+    private boolean backHovered    = false;
 
-    private final Rectangle casualBounds  = new Rectangle(CASUAL_X, BTN_Y, BTN_W, BTN_H);
-    private final Rectangle rankedBounds  = new Rectangle(RANKED_X, BTN_Y, BTN_W, BTN_H);
-    private final Rectangle connectBounds = new Rectangle(BTN_X, BTN_Y, BTN_W * 2 + BTN_GAP, BTN_H); // retry button
+    private final Rectangle connectBounds = new Rectangle(BTN_X, BTN_Y, BTN_W, BTN_H);
     private final Rectangle backBounds    = new Rectangle(40f, 40f, 160f, 50f);
 
     // -----------------------------------------------------------------------
     // Constructor
     // -----------------------------------------------------------------------
     public OnlineScreen(Main game, NetworkClient client) {
-        this.game   = game;
-        this.client = client;
+        this(game, client, new PlayerAppearance());
+    }
+
+    public OnlineScreen(Main game, NetworkClient client, PlayerAppearance appearance) {
+        this.game       = game;
+        this.client     = client;
+        this.appearance = appearance;
 
         camera   = new OrthographicCamera();
         viewport = new FitViewport(1280, 720, camera);
@@ -94,8 +92,9 @@ public class OnlineScreen implements Screen {
         client.setListener(new NetworkClient.MessageListener() {
             @Override
             public void onConnected() {
-                state = State.WAITING;
-                client.joinQueue(isRanked);
+                // Connected — load the world map.
+                // WorldScreen will send LobbyJoinAction after its listener is set up.
+                Gdx.app.postRunnable(() -> enterWorld());
             }
 
             @Override
@@ -108,20 +107,27 @@ public class OnlineScreen implements Screen {
 
             @Override
             public void onMessage(NetworkMessage msg) {
-            	if (msg.type == NetworkMessage.Type.ROOM_JOINED) {
-                    // Match found — transition to the NETWORKED DraftScreen,
-                    // passing the client, assigned team, and mode (casual/ranked).
-                    final int     assignedTeam = msg.assignedTeam;
-                    final boolean ranked       = msg.isRanked;
-                    Gdx.app.postRunnable(() ->
-                        game.setScreen(new DraftScreen(game, client, assignedTeam, ranked, 1, 0, 0))
-                    );
-                } else if (msg.type == NetworkMessage.Type.OPPONENT_DISCONNECTED) {
-                    state        = State.ERROR;
-                    errorMessage = "Opponent disconnected before the game started.";
-                }
+                // WorldScreen handles all lobby/room messages once we're there
             }
         });
+    }
+
+    private void enterWorld() {
+        String[] dirs = {".", "assets", "../assets", "../../assets"};
+        WorldArea area = null;
+        for (String d : dirs) {
+            FileHandle f = Gdx.files.local(d + "/Test_Map.txt");
+            if (f.exists()) {
+                try { area = WorldArea.load(f); } catch (Exception ignored) {}
+                if (area != null) break;
+            }
+        }
+        if (area == null) {
+            state        = State.ERROR;
+            errorMessage = "Could not load Test_Map.txt — make sure it is in the assets folder.";
+            return;
+        }
+        game.setScreen(new WorldScreen(game, area, appearance, client));
     }
 
     // -----------------------------------------------------------------------
@@ -144,8 +150,7 @@ public class OnlineScreen implements Screen {
                 }
 
                 if (c == '\r' || c == '\n') {
-                    // Enter key — casual connect
-                    if (state == State.ENTERING_IP) { isRanked = false; attemptConnect(); }
+                    if (state == State.ENTERING_IP) attemptConnect();
                     return true;
                 }
 
@@ -164,13 +169,9 @@ public class OnlineScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        // Animate the waiting dots
-        if (state == State.WAITING || state == State.CONNECTING) {
+        if (state == State.CONNECTING) {
             dotTimer += delta;
-            if (dotTimer >= 0.5f) {
-                dotTimer = 0f;
-                dotCount = (dotCount + 1) % 4;
-            }
+            if (dotTimer >= 0.5f) { dotTimer = 0f; dotCount = (dotCount + 1) % 4; }
         }
 
         handleInput();
@@ -184,10 +185,9 @@ public class OnlineScreen implements Screen {
         drawTitle(game.batch);
 
         switch (state) {
-            case ENTERING_IP: drawIpEntry(game.batch);  break;
+            case ENTERING_IP: drawIpEntry(game.batch);    break;
             case CONNECTING:  drawConnecting(game.batch); break;
-            case WAITING:     drawWaiting(game.batch);  break;
-            case ERROR:       drawError(game.batch);    break;
+            case ERROR:       drawError(game.batch);      break;
         }
 
         drawBackButton(game.batch);
@@ -215,9 +215,8 @@ public class OnlineScreen implements Screen {
         Vector3 world = camera.unproject(
                 new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0));
 
-        casualHovered = casualBounds.contains(world.x, world.y);
-        rankedHovered = rankedBounds.contains(world.x, world.y);
-        backHovered   = backBounds.contains(world.x, world.y);
+        connectHovered = connectBounds.contains(world.x, world.y);
+        backHovered    = backBounds.contains(world.x, world.y);
 
         if (!Gdx.input.justTouched()) return;
 
@@ -228,14 +227,8 @@ public class OnlineScreen implements Screen {
             return;
         }
 
-        if (state == State.ENTERING_IP) {
-            if (casualBounds.contains(world.x, world.y)) {
-                isRanked = false;
-                attemptConnect();
-            } else if (rankedBounds.contains(world.x, world.y)) {
-                isRanked = true;
-                attemptConnect();
-            }
+        if (state == State.ENTERING_IP && connectBounds.contains(world.x, world.y)) {
+            attemptConnect();
             return;
         }
 
@@ -253,11 +246,10 @@ public class OnlineScreen implements Screen {
             return;
         }
         state = State.CONNECTING;
-        // Connect on a background thread so the UI doesn't freeze
         new Thread(() -> {
             try {
                 client.connect(serverIp.trim());
-                // onConnected() callback will set state to WAITING
+                // onConnected() callback calls enterWorld()
             } catch (Exception e) {
                 errorMessage = "Could not connect to " + serverIp + "\n" + e.getMessage();
                 state        = State.ERROR;
@@ -332,40 +324,27 @@ public class OnlineScreen implements Screen {
         b.setColor(0.10f, 0.10f, 0.16f, 1f);
         b.draw(whitePixel, FIELD_X, FIELD_Y, FIELD_W, FIELD_H);
 
-        // IP text + cursor — centred vertically inside the field
+        // IP text + cursor
         String display = serverIp + (System.currentTimeMillis() % 1000 < 500 ? "|" : " ");
         game.font.getData().setScale(0.85f);
         game.font.setColor(Color.WHITE);
         game.font.draw(b, display, FIELD_X + 12f, FIELD_Y + FIELD_H / 2f + 8f);
 
-        // CASUAL button
-        b.setColor(casualHovered
+        // CONNECT button
+        b.setColor(connectHovered
                 ? new Color(0.22f, 0.22f, 0.38f, 1f)
                 : new Color(0.12f, 0.12f, 0.20f, 1f));
-        b.draw(whitePixel, CASUAL_X, BTN_Y, BTN_W, BTN_H);
+        b.draw(whitePixel, BTN_X, BTN_Y, BTN_W, BTN_H);
         b.setColor(Color.GOLD);
-        b.draw(whitePixel, CASUAL_X, BTN_Y, 4f, BTN_H);
+        b.draw(whitePixel, BTN_X, BTN_Y, 4f, BTN_H);
         b.setColor(Color.WHITE);
         game.font.getData().setScale(0.80f);
-        game.font.setColor(casualHovered ? Color.WHITE : new Color(0.80f, 0.80f, 0.85f, 1f));
-        game.font.draw(b, "CASUAL", CASUAL_X, BTN_Y + BTN_H / 2f + 12f, BTN_W, 1, true);
-
-        // RANKED button
-        b.setColor(rankedHovered
-                ? new Color(0.38f, 0.22f, 0.22f, 1f)
-                : new Color(0.20f, 0.12f, 0.12f, 1f));
-        b.draw(whitePixel, RANKED_X, BTN_Y, BTN_W, BTN_H);
-        b.setColor(new Color(1f, 0.5f, 0.1f, 1f)); // orange accent
-        b.draw(whitePixel, RANKED_X, BTN_Y, 4f, BTN_H);
-        b.setColor(Color.WHITE);
-        game.font.getData().setScale(0.80f);
-        game.font.setColor(rankedHovered ? Color.WHITE : new Color(0.80f, 0.80f, 0.85f, 1f));
-        game.font.draw(b, "RANKED", RANKED_X, BTN_Y + BTN_H / 2f + 12f, BTN_W, 1, true);
+        game.font.setColor(connectHovered ? Color.WHITE : new Color(0.80f, 0.80f, 0.85f, 1f));
+        game.font.draw(b, "CONNECT", BTN_X, BTN_Y + BTN_H / 2f + 12f, BTN_W, 1, true);
 
         game.font.getData().setScale(0.45f);
         game.font.setColor(0.55f, 0.55f, 0.65f, 1f);
-        float totalBtnW = BTN_W * 2 + BTN_GAP;
-        game.font.draw(b, "or press ENTER for Casual", CASUAL_X, BTN_Y - 10f, totalBtnW, 1, true);
+        game.font.draw(b, "or press ENTER", BTN_X, BTN_Y - 10f, BTN_W, 1, true);
 
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
@@ -388,24 +367,6 @@ public class OnlineScreen implements Screen {
         game.font.setColor(Color.WHITE);
     }
 
-    private void drawWaiting(SpriteBatch b) {
-        String dots = ".".repeat(dotCount);
-        GlyphLayout gl = new GlyphLayout();
-        game.font.getData().setScale(0.85f);
-        game.font.setColor(isRanked ? new Color(1f, 0.5f, 0.1f, 1f) : Color.GOLD);
-        String queue = isRanked ? "RANKED" : "CASUAL";
-        String msg = "SEARCHING FOR " + queue + " OPPONENT" + dots;
-        gl.setText(game.font, msg);
-        game.font.draw(b, msg, 640f - gl.width / 2f, FIELD_Y + 20f);
-        game.font.setColor(0.60f, 0.60f, 0.70f, 1f);
-        game.font.getData().setScale(0.55f);
-        String sub = "Connected to " + serverIp + " \u2014 waiting for a " + queue.toLowerCase() + " match";
-        gl.setText(game.font, sub);
-        game.font.draw(b, sub, 640f - gl.width / 2f, FIELD_Y - 14f);
-        game.font.getData().setScale(1.0f);
-        game.font.setColor(Color.WHITE);
-    }
-
     private void drawError(SpriteBatch b) {
         game.font.getData().setScale(0.75f);
         game.font.setColor(new Color(1f, 0.35f, 0.35f, 1f));
@@ -415,19 +376,17 @@ public class OnlineScreen implements Screen {
         game.font.setColor(0.75f, 0.75f, 0.75f, 1f);
         game.font.draw(b, errorMessage, FIELD_X, FIELD_Y - 10f, FIELD_W, -1, true);
 
-        // Retry button — use casualHovered as a proxy since it covers the same X region
-        boolean retryHovered = casualHovered || rankedHovered;
-        b.setColor(retryHovered
+        b.setColor(connectHovered
                 ? new Color(0.22f, 0.22f, 0.38f, 1f)
                 : new Color(0.12f, 0.12f, 0.20f, 1f));
-        b.draw(whitePixel, BTN_X, BTN_Y, BTN_W * 2 + BTN_GAP, BTN_H);
+        b.draw(whitePixel, BTN_X, BTN_Y, BTN_W, BTN_H);
         b.setColor(new Color(1f, 0.35f, 0.35f, 1f));
         b.draw(whitePixel, BTN_X, BTN_Y, 4f, BTN_H);
         b.setColor(Color.WHITE);
 
         game.font.getData().setScale(0.80f);
-        game.font.setColor(retryHovered ? Color.WHITE : new Color(0.80f, 0.80f, 0.85f, 1f));
-        game.font.draw(b, "TRY AGAIN", BTN_X, BTN_Y + BTN_H / 2f + 12f, BTN_W * 2 + BTN_GAP, 1, true);
+        game.font.setColor(connectHovered ? Color.WHITE : new Color(0.80f, 0.80f, 0.85f, 1f));
+        game.font.draw(b, "TRY AGAIN", BTN_X, BTN_Y + BTN_H / 2f + 12f, BTN_W, 1, true);
 
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);

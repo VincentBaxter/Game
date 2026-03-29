@@ -134,4 +134,31 @@ public abstract class Action {
         public RequestDraftStateAction() { super(0); }
         public RequestDraftStateAction(int actingTeam) { super(actingTeam); }
     }
+
+    /** Sent once after connecting — registers the player in the lobby with their username and appearance. */
+    public static class LobbyJoinAction extends Action {
+        public String username;
+        public int modelType    = 0;
+        public int skinColorIdx = 0;
+        public int shirtColorIdx = 0;
+        public int pantsColorIdx = 0;
+        public LobbyJoinAction() { super(0); }
+        public LobbyJoinAction(String username) { super(0); this.username = username; }
+        public LobbyJoinAction(String username, int modelType, int skinColorIdx,
+                               int shirtColorIdx, int pantsColorIdx) {
+            super(0);
+            this.username      = username;
+            this.modelType     = modelType;
+            this.skinColorIdx  = skinColorIdx;
+            this.shirtColorIdx = shirtColorIdx;
+            this.pantsColorIdx = pantsColorIdx;
+        }
+    }
+
+    /** Sent every time the player moves to a new tile in the world map. */
+    public static class PlayerMoveAction extends Action {
+        public int x, y;
+        public PlayerMoveAction() { super(0); }
+        public PlayerMoveAction(int x, int y) { super(0); this.x = x; this.y = y; }
+    }
 }

@@ -105,13 +105,35 @@ public class NetworkClient {
      * @param action The game action to send.
      */
     /**
-     * Tells the server which matchmaking queue to join.
+     * Registers the player in the lobby with their chosen username and appearance.
      * Must be called once after connect() succeeds.
      */
-    public void joinQueue(boolean ranked) {
+    public void sendLobbyJoin(String username, int modelType,
+                              int skinColorIdx, int shirtColorIdx, int pantsColorIdx) {
         if (!connected) return;
-        NetworkAction na = new NetworkAction(null, 0, new Action.JoinQueueAction(ranked));
-        kryoClient.sendTCP(na);
+        kryoClient.sendTCP(new NetworkAction(null, 0,
+                new Action.LobbyJoinAction(username, modelType, skinColorIdx, shirtColorIdx, pantsColorIdx)));
+    }
+
+    /**
+     * Notifies the server that this player moved to a new tile.
+     */
+    public void sendPlayerMove(int x, int y) {
+        if (!connected) return;
+        kryoClient.sendTCP(new NetworkAction(null, 0, new Action.PlayerMoveAction(x, y)));
+    }
+
+    /**
+     * Tells the server to enter the ranked matchmaking queue.
+     */
+    public void joinQueue() {
+        if (!connected) return;
+        kryoClient.sendTCP(new NetworkAction(null, 0, new Action.JoinQueueAction(true)));
+    }
+
+    /** @deprecated Use joinQueue() — ranked is always true now. */
+    public void joinQueue(boolean ranked) {
+        joinQueue();
     }
 
     public void sendAction(Action action) {

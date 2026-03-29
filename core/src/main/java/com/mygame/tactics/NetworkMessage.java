@@ -51,7 +51,21 @@ public class NetworkMessage {
         RANKED_ROUND_OVER,
 
         /** Ranked: all 3 rounds done. Read team1RoundWins/team2RoundWins for final score. */
-        RANKED_MATCH_OVER
+        RANKED_MATCH_OVER,
+
+        // ---- Lobby / world messages ----
+
+        /** Server → joining client: snapshot of all players currently in the lobby. */
+        WORLD_STATE,
+
+        /** Server → all other lobby clients: a new player entered the lobby. */
+        PLAYER_JOINED,
+
+        /** Server → all other lobby clients: a player moved to a new tile. */
+        PLAYER_MOVED,
+
+        /** Server → all lobby clients: a player left (disconnected or entered a match). */
+        PLAYER_LEFT
     }
 
     /** What kind of message this is. */
@@ -106,6 +120,33 @@ public class NetworkMessage {
      * Set once on ROOM_JOINED and can be cached by the client.
      */
     public int assignedTeam;
+
+    // ---- Lobby fields ----
+
+    /** PLAYER_JOINED, PLAYER_MOVED, PLAYER_LEFT: the player this message is about. */
+    public String lobbyUsername;
+
+    /** PLAYER_JOINED, PLAYER_MOVED: tile coordinates of the player. */
+    public int lobbyX, lobbyY;
+
+    /** PLAYER_JOINED: appearance indices for the joining player. */
+    public int lobbyModelType    = 0;
+    public int lobbySkinColorIdx = 0;
+    public int lobbyShirtColorIdx = 0;
+    public int lobbyPantsColorIdx = 0;
+
+    /** WORLD_STATE: usernames of all players currently in the lobby. */
+    public String[] lobbyUsernames;
+
+    /** WORLD_STATE: tile X/Y positions matching lobbyUsernames. */
+    public int[] lobbyXArr;
+    public int[] lobbyYArr;
+
+    /** WORLD_STATE: appearance indices matching lobbyUsernames. */
+    public int[] lobbyModelTypes;
+    public int[] lobbySkinIdxArr;
+    public int[] lobbyShirtIdxArr;
+    public int[] lobbyPantsIdxArr;
 
     /** True when this room is a ranked match (3-round format). */
     public boolean isRanked = false;
@@ -223,6 +264,54 @@ public class NetworkMessage {
         m.success    = true;
         m.team1Picks = t1;
         m.team2Picks = t2;
+        return m;
+    }
+
+    public static NetworkMessage worldState(String[] usernames, int[] xs, int[] ys,
+            int[] modelTypes, int[] skinIdxs, int[] shirtIdxs, int[] pantsIdxs) {
+        NetworkMessage m = new NetworkMessage();
+        m.type              = Type.WORLD_STATE;
+        m.success           = true;
+        m.lobbyUsernames    = usernames;
+        m.lobbyXArr         = xs;
+        m.lobbyYArr         = ys;
+        m.lobbyModelTypes   = modelTypes;
+        m.lobbySkinIdxArr   = skinIdxs;
+        m.lobbyShirtIdxArr  = shirtIdxs;
+        m.lobbyPantsIdxArr  = pantsIdxs;
+        return m;
+    }
+
+    public static NetworkMessage playerJoined(String username, int x, int y,
+            int modelType, int skinColorIdx, int shirtColorIdx, int pantsColorIdx) {
+        NetworkMessage m = new NetworkMessage();
+        m.type               = Type.PLAYER_JOINED;
+        m.success            = true;
+        m.lobbyUsername      = username;
+        m.lobbyX             = x;
+        m.lobbyY             = y;
+        m.lobbyModelType     = modelType;
+        m.lobbySkinColorIdx  = skinColorIdx;
+        m.lobbyShirtColorIdx = shirtColorIdx;
+        m.lobbyPantsColorIdx = pantsColorIdx;
+        return m;
+    }
+
+    public static NetworkMessage playerMoved(String username, int x, int y) {
+        NetworkMessage m = new NetworkMessage();
+        m.type          = Type.PLAYER_MOVED;
+        m.success       = true;
+        m.lobbyUsername = username;
+        m.lobbyX        = x;
+        m.lobbyY        = y;
+        return m;
+    }
+
+    public static NetworkMessage playerLeft(String username) {
+        NetworkMessage m = new NetworkMessage();
+        m.type          = Type.PLAYER_LEFT;
+        m.success       = true;
+        m.lobbyUsername = username;
         return m;
     }
 }

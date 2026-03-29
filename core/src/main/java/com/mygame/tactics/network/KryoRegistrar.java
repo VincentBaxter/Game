@@ -84,6 +84,8 @@ public class KryoRegistrar {
         kryo.register(Action.BoardChoiceAction.class);
         kryo.register(Action.JoinQueueAction.class);
         kryo.register(Action.RequestDraftStateAction.class);
+        kryo.register(Action.LobbyJoinAction.class);
+        kryo.register(Action.PlayerMoveAction.class);
 
         // --- EngineEvent subclasses ---
         kryo.register(EngineEvent.class);

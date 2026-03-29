@@ -35,11 +35,12 @@ public class CombatScreen implements Screen {
 
     // Online mode — null in local play
     private final NetworkClient client;
-    private final int           myTeam;    // 1 or 2 online; 0 in local play
-    private       boolean       isRanked;  // true in ranked online matches
+    private final int           myTeam;      // 1 or 2 online; 0 in local play
+    private       boolean       isRanked;    // true in ranked online matches
     private       int           currentRound;
     private       int           team1RoundWins;
     private       int           team2RoundWins;
+    private final String[]      teamNames;   // display names for each team
     // Non-null when a ranked round/match has just ended (drives overlay rendering)
     private       NetworkMessage rankedEndMsg = null;
 
@@ -101,12 +102,18 @@ public class CombatScreen implements Screen {
     // Constructors
     // -----------------------------------------------------------------------
     public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config) {
-        this.game   = game;
-        this.state  = new GameState(team1, team2, config);
-        this.engine = new GameEngine();
+        this(game, team1, team2, config, new String[]{"Team 1", "Team 2"});
+    }
+
+    public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config,
+                        String[] teamNames) {
+        this.game      = game;
+        this.state     = new GameState(team1, team2, config);
+        this.engine    = new GameEngine();
         this.state.engine = this.engine;
-        this.client = null;  // local mode
-        this.myTeam = 0;     // local mode
+        this.client    = null;
+        this.myTeam    = 0;
+        this.teamNames = teamNames;
         initRendering();
         consumeEvents(engine.initialize(state));
     }
@@ -121,13 +128,23 @@ public class CombatScreen implements Screen {
     public CombatScreen(Main game, GameState serverState,
                         Array<Character> localTeam1, Array<Character> localTeam2,
                         NetworkClient client, int myTeam) {
-        this(game, serverState, localTeam1, localTeam2, client, myTeam, false, 0, 0, 0);
+        this(game, serverState, localTeam1, localTeam2, client, myTeam, false, 0, 0, 0,
+             new String[]{"Team 1", "Team 2"});
     }
 
     public CombatScreen(Main game, GameState serverState,
                         Array<Character> localTeam1, Array<Character> localTeam2,
                         NetworkClient client, int myTeam,
                         boolean isRanked, int roundNumber, int t1Wins, int t2Wins) {
+        this(game, serverState, localTeam1, localTeam2, client, myTeam,
+             isRanked, roundNumber, t1Wins, t2Wins, new String[]{"Team 1", "Team 2"});
+    }
+
+    public CombatScreen(Main game, GameState serverState,
+                        Array<Character> localTeam1, Array<Character> localTeam2,
+                        NetworkClient client, int myTeam,
+                        boolean isRanked, int roundNumber, int t1Wins, int t2Wins,
+                        String[] teamNames) {
         this.game            = game;
         this.engine          = new GameEngine();
         this.client          = client;
@@ -136,6 +153,7 @@ public class CombatScreen implements Screen {
         this.currentRound    = roundNumber;
         this.team1RoundWins  = t1Wins;
         this.team2RoundWins  = t2Wins;
+        this.teamNames       = teamNames;
 
         // Build a fresh GameState using the local (portrait-bearing) character objects.
         // Then sync all battle fields from the server state so positions, health, etc. match.
@@ -228,7 +246,7 @@ public class CombatScreen implements Screen {
                         int nextRound = msg.roundNumber + 1;
                         game.setScreen(new DraftScreen(game, client, myTeam, true,
                                 nextRound, msg.team1RoundWins, msg.team2RoundWins,
-                                msg.remainingPool));
+                                msg.remainingPool, teamNames));
                     });
                 }
                 break;
@@ -783,7 +801,7 @@ public class CombatScreen implements Screen {
         b.setColor(Color.WHITE);
         game.font.getData().setScale(2.5f);
         game.font.setColor(state.winnerTeam == 1 ? Color.CYAN : Color.SALMON);
-        String msg = "TEAM " + state.winnerTeam + " WINS!";
+        String msg = teamNames[state.winnerTeam - 1].toUpperCase() + " WINS!";
         game.font.draw(b, msg, 1280 / 2f - msg.length() * 14, 720 / 2f + 30);
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
@@ -797,7 +815,7 @@ public class CombatScreen implements Screen {
         int winner = rankedEndMsg.team1RoundWins > rankedEndMsg.team2RoundWins ? 1 : 2;
         game.font.getData().setScale(2.8f);
         game.font.setColor(winner == 1 ? Color.CYAN : Color.SALMON);
-        String title = "MATCH OVER — TEAM " + winner + " WINS!";
+        String title = "MATCH OVER — " + teamNames[winner - 1].toUpperCase() + " WINS!";
         game.font.draw(b, title, 640f - title.length() * 15f, 500f);
 
         game.font.getData().setScale(1.2f);
@@ -1034,7 +1052,7 @@ public class CombatScreen implements Screen {
         float labelY = TIMELINE_Y + TIMELINE_H / 2f + 8f;
         game.font.getData().setScale(1.1f);
         game.font.setColor(Color.CYAN);
-        game.font.draw(b, "TEAM 1", 18, labelY);
+        game.font.draw(b, teamNames[0].toUpperCase(), 18, labelY);
         game.font.setColor(Color.WHITE);
 
         // Team 1 unit cards fill from just below the timeline down to the button zone
@@ -1050,7 +1068,7 @@ public class CombatScreen implements Screen {
         float px = 1280 - SIDEBAR_W;
         game.font.getData().setScale(1.1f);
         game.font.setColor(Color.SALMON);
-        game.font.draw(b, "TEAM 2", px + 15, labelY);
+        game.font.draw(b, teamNames[1].toUpperCase(), px + 15, labelY);
         game.font.setColor(Color.WHITE);
         game.font.getData().setScale(1.0f);
 

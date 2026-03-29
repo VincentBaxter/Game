@@ -1,6 +1,7 @@
 package com.mygame.tactics;
 
-import com.mygame.tactics.network.NetworkClient;
+import java.awt.FileDialog;
+import java.awt.Frame;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
@@ -45,27 +46,29 @@ public class MenuScreen implements Screen {
     // Title
     // -----------------------------------------------------------------------
     private static final float TITLE_SCALE    = 3.4f;
-    private static final float TITLE_BASELINE = 530f;
+    private static final float TITLE_BASELINE = 572f;
 
     // -----------------------------------------------------------------------
     // Ornamental rule — sits between title and buttons
     // -----------------------------------------------------------------------
-    private static final float RULE_Y = 370f;
+    private static final float RULE_Y = 502f;
     private static final float RULE_W = 420f;
 
     // -----------------------------------------------------------------------
     // Buttons — anchored from the bottom of the screen upward
     // -----------------------------------------------------------------------
     private static final float BTN_W   = 360f;
-    private static final float BTN_H   = 72f;
-    private static final float BTN_GAP = 18f;
+    private static final float BTN_H   = 68f;
+    private static final float BTN_GAP = 12f;
     private static final float BTN_X   = 640f - BTN_W / 2f;
 
-    // Bottom edges, working upward
-    private static final float BTN_SET_BOTTOM = 60f;
+    // Bottom edges, working upward (5 buttons)
+    private static final float BTN_SET_BOTTOM = 38f;
     private static final float BTN_SET_Y      = BTN_SET_BOTTOM;
-    private static final float BTN_ONL_Y      = BTN_SET_Y  + BTN_H + BTN_GAP;
-    private static final float BTN_SP_Y       = BTN_ONL_Y  + BTN_H + BTN_GAP;
+    private static final float BTN_ONL_Y      = BTN_SET_Y   + BTN_H + BTN_GAP;
+    private static final float BTN_WORLD_Y    = BTN_ONL_Y   + BTN_H + BTN_GAP;
+    private static final float BTN_ME_Y       = BTN_WORLD_Y + BTN_H + BTN_GAP;
+    private static final float BTN_SP_Y       = BTN_ME_Y    + BTN_H + BTN_GAP;
 
     // -----------------------------------------------------------------------
     // Fields
@@ -76,9 +79,11 @@ public class MenuScreen implements Screen {
     private final Texture            whitePixel;
     private final GlyphLayout        layout;
 
-    private final Rectangle btnSinglePlayer = new Rectangle(BTN_X, BTN_SP_Y,  BTN_W, BTN_H);
-    private final Rectangle btnOnline       = new Rectangle(BTN_X, BTN_ONL_Y, BTN_W, BTN_H);
-    private final Rectangle btnSettings     = new Rectangle(BTN_X, BTN_SET_Y, BTN_W, BTN_H);
+    private final Rectangle btnSinglePlayer = new Rectangle(BTN_X, BTN_SP_Y,    BTN_W, BTN_H);
+    private final Rectangle btnMapEditor    = new Rectangle(BTN_X, BTN_ME_Y,    BTN_W, BTN_H);
+    private final Rectangle btnWorld        = new Rectangle(BTN_X, BTN_WORLD_Y, BTN_W, BTN_H);
+    private final Rectangle btnOnline       = new Rectangle(BTN_X, BTN_ONL_Y,   BTN_W, BTN_H);
+    private final Rectangle btnSettings     = new Rectangle(BTN_X, BTN_SET_Y,   BTN_W, BTN_H);
 
     private int   hoveredBtn = -1;
     private float stateTime  = 0f;
@@ -122,8 +127,10 @@ public class MenuScreen implements Screen {
         drawTitle(game.batch);
         drawOrnamentalRule(game.batch, 640f, RULE_Y, RULE_W);
         drawButton(game.batch, btnSinglePlayer, "SINGLE PLAYER", 0);
-        drawButton(game.batch, btnOnline,       "ONLINE",         1);
-        drawButton(game.batch, btnSettings,     "SETTINGS",       2);
+        drawButton(game.batch, btnMapEditor,    "MAP EDITOR",    1);
+        drawButton(game.batch, btnWorld,        "WORLD",         2);
+        drawButton(game.batch, btnOnline,       "ONLINE",        3);
+        drawButton(game.batch, btnSettings,     "SETTINGS",      4);
 
         game.batch.end();
     }
@@ -141,17 +148,30 @@ public class MenuScreen implements Screen {
                 new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0));
 
         if      (btnSinglePlayer.contains(world.x, world.y)) hoveredBtn = 0;
-        else if (btnOnline      .contains(world.x, world.y)) hoveredBtn = 1;
-        else if (btnSettings    .contains(world.x, world.y)) hoveredBtn = 2;
+        else if (btnMapEditor   .contains(world.x, world.y)) hoveredBtn = 1;
+        else if (btnWorld       .contains(world.x, world.y)) hoveredBtn = 2;
+        else if (btnOnline      .contains(world.x, world.y)) hoveredBtn = 3;
+        else if (btnSettings    .contains(world.x, world.y)) hoveredBtn = 4;
         else                                                  hoveredBtn = -1;
 
         if (!Gdx.input.justTouched()) return;
 
         if (btnSinglePlayer.contains(world.x, world.y)) {
             game.setScreen(new DraftScreen(game));
+        } else if (btnMapEditor.contains(world.x, world.y)) {
+            game.setScreen(new MapEditorScreen(game));
+        } else if (btnWorld.contains(world.x, world.y)) {
+            FileDialog fd = new FileDialog((Frame) null, "Open World Area", FileDialog.LOAD);
+            fd.setFilenameFilter((dir, name) -> name.endsWith(".txt"));
+            fd.setVisible(true);
+            if (fd.getFile() != null) {
+                try {
+                    WorldArea area = WorldArea.load(Gdx.files.absolute(fd.getDirectory() + fd.getFile()));
+                    game.setScreen(new WorldScreen(game, area));
+                } catch (Exception ignored) {}
+            }
         } else if (btnOnline.contains(world.x, world.y)) {
-            NetworkClient client = new NetworkClient();
-            game.setScreen(new OnlineScreen(game, client));
+            game.setScreen(new CharacterCreationScreen(game));
         }
         // Settings: TODO
     }
@@ -184,7 +204,7 @@ public class MenuScreen implements Screen {
     // -----------------------------------------------------------------------
     private void drawButton(SpriteBatch b, Rectangle r, String label, int idx) {
         boolean hovered = (hoveredBtn == idx);
-        boolean dimmed  = (idx == 1 || idx == 2);
+        boolean dimmed  = (idx == 3 || idx == 4);
         float   aw      = 6f;
         Color   ac      = dimmed ? BLUE : GOLD;
         float   acA     = dimmed ? 0.30f : (hovered ? 1.0f : 0.72f);
