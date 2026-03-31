@@ -8511,7 +8511,7 @@ tile_water2,-,1,0,-,0
 tile_water1,-,1,0,-,0
 tile_swamp1,-,1,0,-,0
 tile_swamp1,building_cave2,0,0,-,1
-tile_swamp1,building_cave2,0,0,-,0
+tile_swamp1,building_cave2,0,1,-,0
 tile_swamp2,building_cave2,0,0,-,0
 tile_swamp2,-,1,0,-,0
 tile_weird2,-,1,0,-,0

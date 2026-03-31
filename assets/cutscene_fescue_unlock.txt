@@ -1,0 +1,2 @@
+BACKGROUND storybg_forest.png
+SAY Fescue: Your ass is grass

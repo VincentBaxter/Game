@@ -1,0 +1,2 @@
+BACKGROUND storybg_forest.png
+SAY Sean: Prepare to die, bitch!

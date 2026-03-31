@@ -1,0 +1,3 @@
+COMBAT_BOARD
+boardType=FOREST
+spawn=Fescue,4,8

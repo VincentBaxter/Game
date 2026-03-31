@@ -38,6 +38,7 @@ import com.mygame.tactics.characters.Thomas;
 import com.mygame.tactics.characters.Tyler;
 import com.mygame.tactics.characters.Weirdguard;
 import com.mygame.tactics.characters.Ben;
+import com.mygame.tactics.characters.Fescue;
 import com.mygame.tactics.network.NetworkClient;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
@@ -123,6 +124,15 @@ public class DraftScreen implements Screen {
     private int     picksMade    = 0;
     private int     hoveredIndex = -1;
 
+    // Bot draft — used in local single-player; team 2 picks randomly after a short delay
+    private boolean botDraft      = false;
+    private float   botDraftTimer = 0f;
+
+    // Combat cave mode — team2 and config come from a loaded combat board file
+    private Array<Character> presetTeam2    = null;
+    private BoardConfig      presetConfig   = null;
+    private Runnable         onCombatComplete = null;
+
     // -----------------------------------------------------------------------
     // Scroll state
     // -----------------------------------------------------------------------
@@ -133,7 +143,7 @@ public class DraftScreen implements Screen {
     private float   dragStartY       = 0f;
     private float   dragStartOffset  = 0f;
 
-    private final Rectangle       confirmBounds = new Rectangle(640 - 150, 22, 300, 55);
+    private final Rectangle       confirmBounds = new Rectangle(1280 - PANEL_W + 10, 20, PANEL_W - 20, 70);
     private final Array<Rectangle> cardBounds   = new Array<>();
 
     // -----------------------------------------------------------------------
@@ -159,6 +169,16 @@ public class DraftScreen implements Screen {
     /** Local mode — no network. */
     public DraftScreen(Main game) {
         this(game, null, 0, false, 0, 0, 0, null, new String[]{"Team 1", "Team 2"});
+    }
+
+    /** Combat cave mode — player drafts team1; team2 and board config come from the combat file. */
+    public DraftScreen(Main game, Array<Character> presetTeam2, BoardConfig presetConfig,
+                       Runnable onCombatComplete) {
+        this(game, null, 0, false, 0, 0, 0, null, new String[]{"Team 1", "Team 2"});
+        this.presetTeam2       = presetTeam2;
+        this.presetConfig      = presetConfig;
+        this.botDraft          = false;
+        this.onCombatComplete  = onCombatComplete;
     }
 
     /** Online casual mode — pass the connected NetworkClient and this player's team. */
@@ -191,6 +211,7 @@ public class DraftScreen implements Screen {
         this.team1RoundWins  = t1Wins;
         this.team2RoundWins  = t2Wins;
         this.teamNames       = teamNames;
+        this.botDraft        = (client == null); // local single-player: bot picks for team 2
 
         camera   = new OrthographicCamera();
         viewport = new FitViewport(1280, 720, camera);
@@ -279,6 +300,7 @@ public class DraftScreen implements Screen {
         pool.add(new Maxx      (new Texture("maxx.png")));
         pool.add(new Ben       (new Texture("ben.png")));
         pool.add(new Aevan       (new Texture("aevan.png")));
+        pool.add(new Fescue      (new Texture("fescue.png")));
     }
 
     /** Looks up a Character in the local pool by name. */
@@ -344,7 +366,10 @@ public class DraftScreen implements Screen {
             if (isOnline() && myTeam == 2) drawWaitingOverlay(game.batch, "Waiting for opponent to choose board...");
         } else {
             // Only accept local input when it is my turn (or in local mode)
-            if (!waitingForOpponent) handleInput();
+            if (!waitingForOpponent) {
+                if (botDraft && pickingTeam == 2) tickBotDraft(delta);
+                else handleInput();
+            }
             scrollOffset = Math.max(0f, Math.min(maxScroll, scrollOffset));
             rebuildCardBounds();
             drawBackground(game.batch);
@@ -352,6 +377,7 @@ public class DraftScreen implements Screen {
             drawRoundWins(game.batch);
             drawPoolGrid(game.batch);
             drawScrollbar(game.batch);
+            drawAbilityPanel(game.batch);
             drawPickPrompt(game.batch);
             drawConfirmButton(game.batch);
             if (waitingForOpponent) {
@@ -589,9 +615,32 @@ public class DraftScreen implements Screen {
             else                  team2.add(picked);
             picksMade++;
             hoveredIndex = -1;
-            pickingTeam  = (pickingTeam == 1) ? 2 : 1;
+            pickingTeam  = (presetTeam2 != null) ? 1 : ((pickingTeam == 1) ? 2 : 1);
             recalcMaxScroll();
-            if (picksMade == TOTAL_PICKS) boardSelectPhase = true;
+            int totalPicks = (presetTeam2 != null) ? PICKS_PER_TEAM : TOTAL_PICKS;
+            if (picksMade == totalPicks) {
+                if (presetTeam2 != null) launchCombat(presetConfig);
+                else boardSelectPhase = true;
+            }
+        }
+    }
+
+    /** Bot auto-pick: after a short delay, choose a random card from the pool. */
+    private void tickBotDraft(float delta) {
+        botDraftTimer += delta;
+        if (botDraftTimer >= 0.6f) {
+            botDraftTimer = 0f;
+            if (pool.size > 0) {
+                int idx = com.badlogic.gdx.math.MathUtils.random(pool.size - 1);
+                Character picked = pool.removeIndex(idx);
+                picked.team = 2;
+                team2.add(picked);
+                picksMade++;
+                hoveredIndex = -1;
+                pickingTeam  = 1;
+                recalcMaxScroll();
+                if (picksMade == TOTAL_PICKS) boardSelectPhase = true;
+            }
         }
     }
 
@@ -604,7 +653,8 @@ public class DraftScreen implements Screen {
             waitingForOpponent = true;
             boardSelectPhase   = false;
         } else {
-            game.setScreen(new CombatScreen(game, team1, team2, config, teamNames));
+            Array<Character> t2 = (presetTeam2 != null) ? presetTeam2 : team2;
+            game.setScreen(new CombatScreen(game, team1, t2, config, teamNames, true, onCombatComplete));
         }
     }
 
@@ -827,13 +877,6 @@ public class DraftScreen implements Screen {
             game.font.draw(b, pickSuffix, x, textY);
         }
 
-        if (hoveredIndex >= 0 && hoveredIndex < pool.size && myTurn) {
-            String hint = "Selecting: " + pool.get(hoveredIndex).getName().toUpperCase();
-            game.font.getData().setScale(0.62f);
-            game.font.setColor(0.85f, 0.85f, 0.85f, 1f);
-            game.font.draw(b, hint, 640 - hint.length() * 4.0f, panelY + 22f);
-        }
-
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
     }
@@ -860,7 +903,78 @@ public class DraftScreen implements Screen {
 
         game.font.getData().setScale(0.75f);
         game.font.setColor(active ? Color.WHITE : Color.DARK_GRAY);
-        game.font.draw(b, "CONFIRM PICK", bx, by + 38f, bw, 1, true);
+        game.font.draw(b, "CONFIRM PICK", bx, by + bh / 2f + 9f, bw, 1, true);
+        game.font.getData().setScale(1.0f);
+        game.font.setColor(Color.WHITE);
+        b.setColor(Color.WHITE);
+    }
+
+    private void drawAbilityPanel(SpriteBatch b) {
+        boolean myTurn = !isOnline() || (pickingTeam == myTeam);
+        if (hoveredIndex < 0 || hoveredIndex >= pool.size || !myTurn) return;
+
+        Character c  = pool.get(hoveredIndex);
+        Color     tc = (pickingTeam == 1) ? Color.CYAN : Color.SALMON;
+
+        float stripY = 5f, stripH = 100f;
+
+        // ---- Bottom left: character portrait + name ----
+        float infoX = 5f, infoW = PANEL_W - 10f;
+        b.setColor(tc.r * 0.12f, tc.g * 0.12f, tc.b * 0.12f, 1f);
+        b.draw(whitePixel, infoX, stripY, infoW, stripH);
+        b.setColor(tc.r * 0.5f, tc.g * 0.5f, tc.b * 0.5f, 1f);
+        b.draw(whitePixel, infoX, stripY + stripH - 2f, infoW, 2f);
+        b.setColor(Color.WHITE);
+
+        float portraitSize = 76f;
+        if (c.getPortrait() != null)
+            b.draw(c.getPortrait(), infoX + 8f, stripY + (stripH - portraitSize) / 2f, portraitSize, portraitSize);
+
+        float txX = infoX + 8f + portraitSize + 8f;
+        float txY = stripY + stripH - 14f;
+        game.font.getData().setScale(0.62f);
+        game.font.setColor(tc);
+        game.font.draw(b, c.getName().toUpperCase(), txX, txY);
+        game.font.getData().setScale(0.46f);
+        game.font.setColor(classColor(c));
+        game.font.draw(b, c.getCharClass().name(), txX, txY - 22f);
+        game.font.getData().setScale(0.40f);
+        game.font.setColor(0.75f, 0.75f, 0.75f, 1f);
+        game.font.draw(b, "HP "  + c.getMaxHealth() + "  ATK " + c.getAtk(),   txX, txY - 42f);
+        game.font.draw(b, "MAG " + c.getMag()       + "  ARM " + c.getArmor(), txX, txY - 56f);
+
+        // ---- Bottom center: one box per ability ----
+        Ability[] abilities = c.getAbilities();
+        if (abilities != null && abilities.length > 0) {
+            int   n       = abilities.length;
+            float areaX   = GRID_X + 4f;
+            float areaW   = GRID_W - 8f;
+            float boxGap  = 6f;
+            float boxW    = (areaW - (n - 1) * boxGap) / n;
+
+            for (int i = 0; i < n; i++) {
+                Ability ab = abilities[i];
+                float bx = areaX + i * (boxW + boxGap);
+
+                b.setColor(tc.r * 0.10f, tc.g * 0.10f, tc.b * 0.10f, 1f);
+                b.draw(whitePixel, bx, stripY, boxW, stripH);
+                b.setColor(tc.r * 0.55f, tc.g * 0.55f, tc.b * 0.55f, 1f);
+                b.draw(whitePixel, bx, stripY + stripH - 2f, boxW, 2f);
+                b.setColor(Color.WHITE);
+
+                game.font.getData().setScale(0.48f);
+                game.font.setColor(tc);
+                game.font.draw(b, ab.getName().toUpperCase(), bx + 5f, stripY + stripH - 7f, boxW - 10f, 1, true);
+
+                String desc = ab.getDescription();
+                if (desc != null && !desc.isEmpty()) {
+                    game.font.getData().setScale(0.40f);
+                    game.font.setColor(0.80f, 0.80f, 0.80f, 1f);
+                    game.font.draw(b, desc, bx + 5f, stripY + stripH - 28f, boxW - 10f, -1, true);
+                }
+            }
+        }
+
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
         b.setColor(Color.WHITE);

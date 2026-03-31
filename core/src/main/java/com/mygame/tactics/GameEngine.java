@@ -234,6 +234,9 @@ public class GameEngine {
                 || state.activeUnit.getCharClass() == Enums.CharClass.SNIPER) {
             state.isFighterBonusMove = false;
             endTurn(state, events);
+        } else if (state.isMarathonMove) {
+            state.isMarathonMove = false;
+            endTurn(state, events);
         } else {
             state.turnPhase = GameState.TurnPhase.ABILITY;
         }
@@ -260,9 +263,26 @@ public class GameEngine {
 
         Character occupant = state.board.getCharacterAt(targetX, targetY);
 
-        // Invisible enemy collision — reveal + bounce
+        // Invisible enemy collision
         if (occupant != null && occupant != state.activeUnit
                 && occupant.isInvisible() && occupant.team != state.activeUnit.team) {
+            // Mason's Gargoyle Unleashed: moving onto his tile triggers the kill
+            if (occupant instanceof Mason) {
+                Mason mason = (Mason) occupant;
+                if (!mason.gargoyleTriggered) {
+                    mason.gargoyleTriggered = true;
+                    mason.setInvisible(false);
+                    mason.setUltActive(false);
+                    events.add(new EngineEvent.PopupEvent("GARGOYLE!", 0, "ACTIVE", targetX, targetY));
+                    events.add(new EngineEvent.PopupEvent("REVEALED", 0, "STATUS", targetX, targetY));
+                    state.activeUnit.setHealth(0);
+                    handleDeath(state.activeUnit, state, events);
+                    if (state.isGameOver()) return;
+                    endTurn(state, events);
+                    return;
+                }
+            }
+            // Regular invisible character — reveal + bounce
             occupant.setInvisible(false);
             if (occupant instanceof Billy) ((Billy) occupant).disguisedAs = null;
             events.add(new EngineEvent.PopupEvent("AMBUSHED!", 0, "REVEAL", targetX, targetY));
@@ -883,7 +903,11 @@ public class GameEngine {
                 state.activeUnit.health = Math.max(0, state.activeUnit.health - poisonDmg);
                 events.add(new EngineEvent.PopupEvent("POISON", poisonDmg, "TRUE",
                         state.activeUnit.x, state.activeUnit.y));
-                if (state.activeUnit.isDead()) { endTurn(state, events); return; }
+                if (state.activeUnit.isDead()) {
+                    handleDeath(state.activeUnit, state, events);
+                    if (!state.isGameOver()) endTurn(state, events);
+                    return;
+                }
             }
         }
 

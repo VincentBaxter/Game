@@ -45,6 +45,9 @@ public class WorldScreen implements Screen {
     private int   playerX, playerY;
     private float moveCd = 0f;
 
+    // Smoothed render position (lerps toward playerX/Y * TILE_SZ each frame)
+    private float visualX, visualY;
+
     // Current interactable tile the player is adjacent to (or on), and its map position
     private WorldTile nearbyTile = null;
     private int       nearbyTileX = -1, nearbyTileY = -1;
@@ -65,25 +68,38 @@ public class WorldScreen implements Screen {
     // True once the player has sent JoinQueueAction (fountain → waiting for match)
     private boolean searchingForMatch = false;
 
+    // NPC rendering
+    private float npcBobTime = 0f;
+    private final Map<String, Texture> npcPortraits = new LinkedHashMap<>();
+
+    // Current nearby interactable NPC (set each frame by updateNearby)
+    private WorldArea.WorldNpc nearbyNpc = null;
+
     // ---- Constructors ----
 
     public WorldScreen(Main game, WorldArea area) {
-        this(game, area, null, -1, -1, -1, -1, null, null);
+        this(game, area, null, -1, -1, area.spawnX, area.spawnY, null, null);
     }
 
     public WorldScreen(Main game, WorldArea area, PlayerAppearance appearance) {
-        this(game, area, null, -1, -1, -1, -1, appearance, null);
+        this(game, area, null, -1, -1, area.spawnX, area.spawnY, appearance, null);
     }
 
     /** Online lobby constructor — connects player to live world. */
     public WorldScreen(Main game, WorldArea area, PlayerAppearance appearance, NetworkClient client) {
-        this(game, area, null, -1, -1, -1, -1, appearance, client);
+        this(game, area, null, -1, -1, area.spawnX, area.spawnY, appearance, client);
     }
 
     /** Cave-entry — spawns near the top of the new area. */
     public WorldScreen(Main game, WorldArea area, WorldArea returnArea, int returnX, int returnY,
-                       PlayerAppearance appearance) {
-        this(game, area, returnArea, returnX, returnY, area.width / 2, area.height - 1, appearance, null);
+                       PlayerAppearance appearance, NetworkClient client) {
+        this(game, area, returnArea, returnX, returnY, area.width / 2, area.height - 1, appearance, client);
+    }
+
+    /** Returns to a saved position in an area — used after cave combat. */
+    public WorldScreen(Main game, WorldArea area, int spawnX, int spawnY,
+                       PlayerAppearance appearance, NetworkClient client) {
+        this(game, area, null, -1, -1, spawnX, spawnY, appearance, client);
     }
 
     /** Full constructor. spawnX/Y = -1 → auto-find nearest walkable to centre. */
@@ -111,8 +127,11 @@ public class WorldScreen implements Screen {
 
         loadTextures();
         fixupAnchors();
+        area.applyOverrides(Main.flags);
         spawnPlayer(spawnX >= 0 ? spawnX : area.width  / 2,
                     spawnY >= 0 ? spawnY : area.height / 2);
+        visualX = playerX * TILE_SZ;
+        visualY = playerY * TILE_SZ;
         snapCamera();
 
         if (client != null) {
@@ -202,8 +221,8 @@ public class WorldScreen implements Screen {
     // ---- Camera ----
 
     private void snapCamera() {
-        worldCam.position.set(playerX * TILE_SZ + TILE_SZ / 2f,
-                              playerY * TILE_SZ + TILE_SZ / 2f, 0);
+        worldCam.position.set(visualX + TILE_SZ / 2f,
+                              visualY + TILE_SZ / 2f, 0);
         clampCam();
         worldCam.update();
     }
@@ -232,15 +251,21 @@ public class WorldScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        moveCd -= delta;
+        moveCd    -= delta;
+        npcBobTime += delta;
         handleInput();
         updateNearby();
 
+        // Smooth player position
+        float targetX = playerX * TILE_SZ;
+        float targetY = playerY * TILE_SZ;
+        float lerp = Math.min(1f, delta * 16f);
+        visualX += (targetX - visualX) * lerp;
+        visualY += (targetY - visualY) * lerp;
+
         // Smooth camera follow
-        float tx = playerX * TILE_SZ + TILE_SZ / 2f;
-        float ty = playerY * TILE_SZ + TILE_SZ / 2f;
-        worldCam.position.x += (tx - worldCam.position.x) * Math.min(1f, delta * 8f);
-        worldCam.position.y += (ty - worldCam.position.y) * Math.min(1f, delta * 8f);
+        worldCam.position.x += (visualX + TILE_SZ / 2f - worldCam.position.x) * Math.min(1f, delta * 8f);
+        worldCam.position.y += (visualY + TILE_SZ / 2f - worldCam.position.y) * Math.min(1f, delta * 8f);
         clampCam();
         worldCam.update();
         hudCam.update();
@@ -251,6 +276,7 @@ public class WorldScreen implements Screen {
         game.batch.setProjectionMatrix(worldCam.combined);
         game.batch.begin();
         drawMap();
+        drawNpcs();
         drawOtherPlayers();
         drawPlayer();
         game.batch.end();
@@ -299,6 +325,17 @@ public class WorldScreen implements Screen {
         nearbyTile  = null;
         nearbyTileX = -1;
         nearbyTileY = -1;
+        nearbyNpc   = null;
+
+        // Check for interactable NPCs adjacent to or on the player's tile
+        for (WorldArea.WorldNpc npc : area.npcs) {
+            if (!npc.interactable) continue;
+            if (npc.winFlag != null && Main.flags.is(npc.winFlag)) continue;
+            int dx = Math.abs(npc.x - playerX), dy = Math.abs(npc.y - playerY);
+            if (dx + dy <= 1) { nearbyNpc = npc; return; }
+        }
+
+        // Check for interactable tiles
         int[][] checks = {
             {playerX,     playerY},
             {playerX + 1, playerY},
@@ -314,11 +351,21 @@ public class WorldScreen implements Screen {
     }
 
     private void interact() {
+        if (nearbyNpc != null) {
+            handleNpcInteract(nearbyNpc);
+            return;
+        }
         if (nearbyTile == null) return;
+
+        // Special trigger: exit to online character creation
+        if ("online_exit".equals(nearbyTile.triggerAreaId)) {
+            game.setScreen(new CharacterCreationScreen(game));
+            return;
+        }
 
         // Bottom-row exit tile: return to the previous area, spawning at the stored position
         if (returnArea != null && nearbyTileY == 0) {
-            game.setScreen(new WorldScreen(game, returnArea, null, -1, -1, returnX, returnY, appearance, null));
+            game.setScreen(new WorldScreen(game, returnArea, null, -1, -1, returnX, returnY, appearance, client));
             return;
         }
 
@@ -337,10 +384,136 @@ public class WorldScreen implements Screen {
                 game.setScreen(new OnlineScreen(game, new NetworkClient(), appearance != null ? appearance : new PlayerAppearance()));
             }
         }
+        if (obj.equals("building_cave2")) {
+            playCutsceneThen(nearbyTile, () -> enterCombatCave("combat_cave2.txt"));
+            return;
+        }
         if (obj.startsWith("building_cave")) {
-            enterCave();
+            playCutsceneThen(nearbyTile, this::enterCave);
+            return;
         }
         // Other buildings: placeholder for future content
+    }
+
+    /**
+     * Searches common asset directories for a file by name.
+     * Checks both the root and a "cutscenes/" subdirectory so files work
+     * regardless of whether they're organised into a subfolder.
+     * Returns the first FileHandle that exists, or null if not found.
+     */
+    private FileHandle findAssetFile(String filename) {
+        String[] dirs = {".", "assets", "../assets", "../../assets"};
+        for (String d : dirs) {
+            FileHandle f = Gdx.files.local(d + "/" + filename);
+            if (f.exists()) return f;
+            f = Gdx.files.local(d + "/cutscenes/" + filename);
+            if (f.exists()) return f;
+        }
+        return null;
+    }
+
+    /**
+     * If the tile has a triggerAreaId and a matching cutscene script exists,
+     * plays the cutscene first then calls action. Otherwise calls action immediately.
+     */
+    private void playCutsceneThen(WorldTile tile, Runnable action) {
+        if (tile.triggerAreaId != null) {
+            FileHandle f = findAssetFile(tile.triggerAreaId + ".txt");
+            if (f != null) {
+                try {
+                    CutsceneData data = CutsceneData.load(f);
+                    game.setScreen(new CutsceneScreen(game, data, Main.flags, action));
+                    return;
+                } catch (Exception e) {
+                    Gdx.app.error("WorldScreen", "Cutscene load failed: " + e.getMessage());
+                }
+            }
+        }
+        action.run(); // no cutscene — go straight to the transition
+    }
+
+    private void handleNpcInteract(WorldArea.WorldNpc npc) {
+        boolean hasCombat   = npc.combatFile != null && !npc.combatFile.isEmpty();
+        boolean alreadyWon  = npc.winFlag != null && Main.flags.is(npc.winFlag);
+        boolean hasCutscene = npc.triggerAreaId != null;
+
+        if (hasCombat && alreadyWon) return;  // already beaten, nothing to do
+
+        if (hasCutscene) {
+            FileHandle cutsceneFile = findAssetFile(npc.triggerAreaId + ".txt");
+            if (cutsceneFile != null) {
+                try {
+                    CutsceneData data = CutsceneData.load(cutsceneFile);
+                    Runnable afterCutscene = hasCombat ? () -> launchNpcCombat(npc) : () -> {};
+                    game.setScreen(new CutsceneScreen(game, data, Main.flags, afterCutscene));
+                    return;
+                } catch (Exception e) {
+                    Gdx.app.error("WorldScreen", "NPC cutscene load failed: " + e.getMessage());
+                }
+            }
+        }
+
+        // No cutscene (or file not found) — go straight to combat if applicable
+        if (hasCombat) launchNpcCombat(npc);
+    }
+
+    /**
+     * Launches a DraftScreen combat against the board specified by npc.combatFile.
+     * On win, sets npc.winFlag=1, checks if all combat NPCs in the area are beaten,
+     * and returns to this area (reloading from disk so flag-based tile overrides apply).
+     */
+    private void launchNpcCombat(WorldArea.WorldNpc npc) {
+        final WorldArea        savedArea   = area;
+        final int              savedX      = playerX;
+        final int              savedY      = playerY;
+        final PlayerAppearance savedApp    = appearance;
+        final NetworkClient    savedClient = client;
+        final String           winFlagKey  = npc.winFlag;
+
+        Runnable returnAction = () -> {
+            if (winFlagKey != null && !winFlagKey.isEmpty()) {
+                Main.flags.set(winFlagKey, 1);
+            }
+            checkAreaComplete();
+            // Reload the area from disk so flag overrides (e.g. tree removal) take effect
+            WorldArea freshArea = savedArea;
+            if (savedArea.sourceFile != null) {
+                try { freshArea = WorldArea.load(Gdx.files.absolute(savedArea.sourceFile)); }
+                catch (Exception ignored) {}
+            }
+            freshArea.applyOverrides(Main.flags);
+            game.setScreen(new WorldScreen(game, freshArea, savedX, savedY, savedApp, savedClient));
+        };
+
+        String[] dirs = {".", "assets", "../assets", "../../assets"};
+        for (String d : dirs) {
+            FileHandle f = Gdx.files.local(d + "/" + npc.combatFile);
+            if (f.exists()) {
+                CombatBoardLoader.Result result = CombatBoardLoader.load(f);
+                if (result != null)
+                    game.setScreen(new DraftScreen(game, result.team2, result.config, returnAction));
+                return;
+            }
+        }
+        Gdx.app.error("WorldScreen", "NPC combat file not found: " + npc.combatFile);
+    }
+
+    /**
+     * Checks whether every combat NPC (one with a combatFile) in the current area
+     * has had their winFlag set. If so, marks the area complete via
+     * "<areaId>_complete = 1" in PlayerFlags.
+     */
+    private void checkAreaComplete() {
+        boolean hasCombatNpc = false;
+        for (WorldArea.WorldNpc npc : area.npcs) {
+            if (npc.combatFile == null || npc.combatFile.isEmpty()) continue;
+            if (npc.winFlag    == null || npc.winFlag.isEmpty())    continue;
+            hasCombatNpc = true;
+            if (!Main.flags.is(npc.winFlag)) return; // still at least one unbeaten
+        }
+        if (hasCombatNpc) {
+            Main.flags.set(area.areaId + "_complete", 1);
+        }
     }
 
     private void enterCave() {
@@ -352,8 +525,36 @@ public class WorldScreen implements Screen {
             if (f.exists()) {
                 try {
                     WorldArea cave = WorldArea.load(f);
-                    game.setScreen(new WorldScreen(game, cave, area, playerX, playerY, appearance));
+                    game.setScreen(new WorldScreen(game, cave, area, playerX, playerY, appearance, client));
                 } catch (Exception ignored) {}
+                return;
+            }
+        }
+    }
+
+    private void enterCombatCave(String filename) {
+        final WorldArea        savedArea   = area;
+        final int              savedX      = playerX;
+        final int              savedY      = playerY;
+        final PlayerAppearance savedApp    = appearance;
+        final NetworkClient    savedClient = client;
+        Runnable returnAction = () -> {
+            // Reload the area from disk so flag-based tile overrides are re-evaluated
+            WorldArea freshArea = savedArea;
+            if (savedArea.sourceFile != null) {
+                try { freshArea = WorldArea.load(Gdx.files.absolute(savedArea.sourceFile)); }
+                catch (Exception ignored) {}
+            }
+            game.setScreen(new WorldScreen(game, freshArea, savedX, savedY, savedApp, savedClient));
+        };
+
+        String[] dirs = {".", "assets", "../assets", "../../assets"};
+        for (String d : dirs) {
+            FileHandle f = Gdx.files.local(d + "/" + filename);
+            if (f.exists()) {
+                CombatBoardLoader.Result result = CombatBoardLoader.load(f);
+                if (result != null)
+                    game.setScreen(new DraftScreen(game, result.team2, result.config, returnAction));
                 return;
             }
         }
@@ -476,6 +677,94 @@ public class WorldScreen implements Screen {
         }
     }
 
+    // ---- Draw: NPCs ----
+
+    private void drawNpcs() {
+        // Slow bob: period ~2.5 s, amplitude ±5 px
+        float bob = (float) Math.sin(npcBobTime * Math.PI * 0.8) * 5f;
+        float ts  = TILE_SZ;
+
+        for (WorldArea.WorldNpc npc : area.npcs) {
+            if (npc.winFlag != null && Main.flags.is(npc.winFlag)) continue;
+            float nx = npc.x * ts;
+            float ny = npc.y * ts + bob;
+
+            // Shadow at the tile base (doesn't bob)
+            game.batch.setColor(0f, 0f, 0f, 0.28f);
+            game.batch.draw(whitePixel, npc.x * ts + ts * 0.10f, npc.y * ts + ts * 0.02f, ts * 0.80f, ts * 0.06f);
+
+            Texture portrait = getPortrait(npc.charName);
+            if (portrait != null) {
+                float pw = ts * 0.78f, ph = ts * 0.78f;
+                game.batch.setColor(Color.WHITE);
+                game.batch.draw(portrait, nx + (ts - pw) / 2f, ny + ts * 0.12f, pw, ph);
+            } else {
+                // Placeholder humanoid, color keyed to charName
+                int   hash = npc.charName.hashCode();
+                float hr   = ((hash & 0xFF) / 255f) * 0.5f + 0.25f;
+                float hg   = (((hash >> 8)  & 0xFF) / 255f) * 0.5f + 0.25f;
+                float hb   = (((hash >> 16) & 0xFF) / 255f) * 0.5f + 0.25f;
+                // Legs
+                game.batch.setColor(hr * 0.5f, hg * 0.5f, hb * 0.5f, 1f);
+                game.batch.draw(whitePixel, nx + ts * 0.22f, ny + ts * 0.08f, ts * 0.18f, ts * 0.20f);
+                game.batch.draw(whitePixel, nx + ts * 0.60f, ny + ts * 0.08f, ts * 0.18f, ts * 0.20f);
+                // Body
+                float bodyW = ts * 0.42f, bodyH = ts * 0.28f;
+                float bodyX = nx + (ts - bodyW) / 2f, bodyY = ny + ts * 0.26f;
+                game.batch.setColor(hr, hg, hb, 1f);
+                game.batch.draw(whitePixel, bodyX, bodyY, bodyW, bodyH);
+                // Head
+                float headSz = ts * 0.30f;
+                float headX  = nx + (ts - headSz) / 2f, headY = bodyY + bodyH + ts * 0.02f;
+                game.batch.setColor(0.94f, 0.78f, 0.62f, 1f);
+                game.batch.draw(whitePixel, headX, headY, headSz, headSz);
+            }
+
+            // Name label above the NPC
+            float labelY = ny + ts * 0.90f + ts * 0.12f;
+            game.font.getData().setScale(0.34f);
+            layout.setText(game.font, npc.charName);
+            float labelX = nx + ts / 2f - layout.width / 2f;
+            game.font.setColor(0f, 0f, 0f, 0.75f);
+            game.font.draw(game.batch, npc.charName, labelX + 1f, labelY - 1f);
+            game.font.setColor(1f, 0.95f, 0.70f, 1f);
+            game.font.draw(game.batch, npc.charName, labelX, labelY);
+
+            // "!" indicator above the label for interactable NPCs
+            if (npc.interactable) {
+                String mark = "!";
+                layout.setText(game.font, mark);
+                float mx = nx + ts / 2f - layout.width / 2f;
+                float my = labelY + layout.height + 2f;
+                game.font.setColor(1f, 0.85f, 0f, 1f);
+                game.font.draw(game.batch, mark, mx, my);
+            }
+
+            game.font.getData().setScale(1f);
+            game.font.setColor(Color.WHITE);
+            game.batch.setColor(Color.WHITE);
+        }
+    }
+
+    /** Lazily loads and caches a character portrait by name (lower-cased .png filename). */
+    private Texture getPortrait(String charName) {
+        String key = charName.toLowerCase();
+        if (npcPortraits.containsKey(key)) return npcPortraits.get(key);
+        String[] dirs = {".", "assets", "../assets", "../../assets"};
+        for (String d : dirs) {
+            try {
+                FileHandle f = Gdx.files.local(d + "/" + key + ".png");
+                if (f.exists()) {
+                    Texture t = new Texture(f);
+                    npcPortraits.put(key, t);
+                    return t;
+                }
+            } catch (Exception ignored) {}
+        }
+        npcPortraits.put(key, null); // cache the miss so we don't retry every frame
+        return null;
+    }
+
     // ---- Draw: other players ----
 
     private void drawOtherPlayers() {
@@ -546,8 +835,8 @@ public class WorldScreen implements Screen {
     // ---- Draw: player ----
 
     private void drawPlayer() {
-        float px = playerX * TILE_SZ;
-        float py = playerY * TILE_SZ;
+        float px = visualX;
+        float py = visualY;
         float ts = TILE_SZ;
 
         Color skin  = appearance != null ? appearance.getSkinColor()  : new Color(0.94f, 0.78f, 0.62f, 1f);
@@ -628,11 +917,13 @@ public class WorldScreen implements Screen {
     // ---- Draw: HUD ----
 
     private void drawHud() {
-        // Interaction prompt
-        if (nearbyTile != null) {
-            String label = interactionLabel(nearbyTile);
+        // Interaction prompt (NPCs take priority over tiles)
+        String promptLabel = nearbyNpc != null ? "[E] Talk to " + nearbyNpc.charName
+                           : nearbyTile != null ? interactionLabel(nearbyTile)
+                           : null;
+        if (promptLabel != null) {
             game.font.getData().setScale(0.65f);
-            layout.setText(game.font, label);
+            layout.setText(game.font, promptLabel);
             float bw = layout.width + 36f;
             float bh = layout.height + 22f;
             float bx = (1280f - bw) / 2f;
@@ -646,7 +937,7 @@ public class WorldScreen implements Screen {
             game.batch.draw(whitePixel, bx, by + bh - 2, bw, 2);
 
             game.font.setColor(Color.WHITE);
-            game.font.draw(game.batch, label, bx + 18f, by + bh - 11f);
+            game.font.draw(game.batch, promptLabel, bx + 18f, by + bh - 11f);
             game.font.getData().setScale(1f);
             game.font.setColor(Color.WHITE);
         }
@@ -671,6 +962,13 @@ public class WorldScreen implements Screen {
             game.batch.setColor(Color.WHITE);
         }
 
+        // Debug: lobby player count (remove once multiplayer is confirmed working)
+        if (client != null) {
+            game.font.getData().setScale(0.34f);
+            game.font.setColor(new Color(0.6f, 1f, 0.6f, 1f));
+            game.font.draw(game.batch, "Others in lobby: " + otherPlayers.size(), 10f, 36f);
+        }
+
         // Controls hint
         game.font.getData().setScale(0.34f);
         game.font.setColor(new Color(0.35f, 0.35f, 0.45f, 1f));
@@ -681,6 +979,7 @@ public class WorldScreen implements Screen {
     }
 
     private String interactionLabel(WorldTile tile) {
+        if ("online_exit".equals(tile.triggerAreaId))        return "[E] Enter Online World";
         if (returnArea != null && nearbyTileY == 0)          return "[E] Exit Cave";
         if (tile.objectId == null)                           return "[E] Interact";
         if (tile.objectId.startsWith("building_fountain"))   return "[E] Search for Ranked Match";
@@ -701,5 +1000,6 @@ public class WorldScreen implements Screen {
     public void dispose() {
         whitePixel.dispose();
         for (Texture t : textures.values()) t.dispose();
+        for (Texture t : npcPortraits.values()) if (t != null) t.dispose();
     }
 }

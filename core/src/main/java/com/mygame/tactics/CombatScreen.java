@@ -44,13 +44,21 @@ public class CombatScreen implements Screen {
     // Non-null when a ranked round/match has just ended (drives overlay rendering)
     private       NetworkMessage rankedEndMsg = null;
 
+    // Bot mode — true when team 2 is controlled by BotController (local single player)
+    private final boolean       botMatch;
+    private       BotController botController;
+    private       float         botTimer = 0f;
+    // Called instead of returning to MenuScreen when combat ends in bot/cave mode
+    private       Runnable      onComplete = null;
+
     // -----------------------------------------------------------------------
     // Rendering-only
     // -----------------------------------------------------------------------
     private OrthographicCamera camera;
     private FitViewport        viewport;
     private Texture whitePixel, wallTexture, poisonTileTexture, fireTileTexture,
-                    pergolaTileTexture, vinesTileTexture, drywallTileTexture, clothesTileTexture, cloudTileTexture, lockdownTileTexture;
+                    pergolaTileTexture, vinesTileTexture, drywallTileTexture, clothesTileTexture, cloudTileTexture, lockdownTileTexture,
+                    havenTileTexture;
     private Map<Enums.CharType,  Texture> typeIcons  = new HashMap<>();
     private Map<Enums.CharClass, Texture> classIcons = new HashMap<>();
     private Array<DamagePopup> damagePopups = new Array<>();
@@ -102,11 +110,22 @@ public class CombatScreen implements Screen {
     // Constructors
     // -----------------------------------------------------------------------
     public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config) {
-        this(game, team1, team2, config, new String[]{"Team 1", "Team 2"});
+        this(game, team1, team2, config, new String[]{"Team 1", "Team 2"}, false);
     }
 
     public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config,
                         String[] teamNames) {
+        this(game, team1, team2, config, teamNames, false);
+    }
+
+    public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config,
+                        String[] teamNames, boolean botMatch, Runnable onComplete) {
+        this(game, team1, team2, config, teamNames, botMatch);
+        this.onComplete = onComplete;
+    }
+
+    public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config,
+                        String[] teamNames, boolean botMatch) {
         this.game      = game;
         this.state     = new GameState(team1, team2, config);
         this.engine    = new GameEngine();
@@ -114,6 +133,8 @@ public class CombatScreen implements Screen {
         this.client    = null;
         this.myTeam    = 0;
         this.teamNames = teamNames;
+        this.botMatch  = botMatch;
+        if (botMatch) this.botController = new BotController(engine);
         initRendering();
         consumeEvents(engine.initialize(state));
     }
@@ -154,6 +175,7 @@ public class CombatScreen implements Screen {
         this.team1RoundWins  = t1Wins;
         this.team2RoundWins  = t2Wins;
         this.teamNames       = teamNames;
+        this.botMatch        = false;
 
         // Build a fresh GameState using the local (portrait-bearing) character objects.
         // Then sync all battle fields from the server state so positions, health, etc. match.
@@ -424,6 +446,7 @@ public class CombatScreen implements Screen {
         clothesTileTexture = new Texture("clothes_tile.png");
         cloudTileTexture = new Texture("cloud_tile.png");
         lockdownTileTexture = new Texture("lockdown_tile.png");
+        havenTileTexture = new Texture("tile_haven.png");
 
         // Type icons
         for (Enums.CharType t : Enums.CharType.values()) {
@@ -459,7 +482,10 @@ public class CombatScreen implements Screen {
         // Tick down the post-ability delay; block input while either it or a
         // move animation is active.
         if (postAbilityDelay > 0f) postAbilityDelay -= delta;
-        if (!isAnimatingMove && postAbilityDelay <= 0f) handleInput();
+        if (!isAnimatingMove && postAbilityDelay <= 0f) {
+            if (isBotTurn()) tickBot(delta);
+            else { botTimer = 0f; handleInput(); }
+        }
 
         // Detect when it becomes my turn in online play and trigger the flash
         if (client != null && state.activeUnit != lastSeenActiveUnit) {
@@ -475,7 +501,8 @@ public class CombatScreen implements Screen {
         if (matchOverReturnDelay > 0f) {
             matchOverReturnDelay -= delta;
             if (matchOverReturnDelay <= 0f) {
-                game.setScreen(new MenuScreen(game));
+                if (onComplete != null) onComplete.run();
+                else game.setScreen(new MenuScreen(game));
                 return;
             }
         }
@@ -541,6 +568,23 @@ public class CombatScreen implements Screen {
         game.font.setColor(Color.WHITE);
         game.font.getData().setScale(1.0f);
         game.batch.end();
+    }
+
+    // -----------------------------------------------------------------------
+    // Bot controller
+    // -----------------------------------------------------------------------
+    private boolean isBotTurn() {
+        return botMatch && client == null && state.activeUnit != null
+                && state.activeUnit.team == 2 && !state.isGameOver();
+    }
+
+    private void tickBot(float delta) {
+        float threshold = (state.isPreGame() || state.isMovementPhase()) ? 0.5f : 0.8f;
+        botTimer += delta;
+        if (botTimer >= threshold) {
+            botTimer = 0f;
+            dispatch(botController.decide(state));
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -802,9 +846,14 @@ public class CombatScreen implements Screen {
         game.font.getData().setScale(2.5f);
         game.font.setColor(state.winnerTeam == 1 ? Color.CYAN : Color.SALMON);
         String msg = teamNames[state.winnerTeam - 1].toUpperCase() + " WINS!";
-        game.font.draw(b, msg, 1280 / 2f - msg.length() * 14, 720 / 2f + 30);
+        GlyphLayout gl = new GlyphLayout(game.font, msg);
+        game.font.draw(b, msg, 640f - gl.width / 2f, 360f + gl.height / 2f);
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
+
+        // In local bot matches, auto-return to menu after a short delay
+        if (botMatch && matchOverReturnDelay < 0f)
+            matchOverReturnDelay = 3.0f;
     }
 
     private void drawRankedMatchOverOverlay(SpriteBatch b) {
@@ -866,11 +915,16 @@ public class CombatScreen implements Screen {
                 }
                 boolean isHaven = (state.haven != null
                         && x == state.haven.getX() && y == state.haven.getY());
-                if (isHaven)                              batch.setColor(Color.GOLD);
-                else if ((x + y) % 2 == 0)               batch.setColor(state.boardConfig.tileColorA);
-                else                                      batch.setColor(state.boardConfig.tileColorB);
-                batch.draw(whitePixel, startX + x * tileSize, startY + y * tileSize,
-                        tileSize - 1, tileSize - 1);
+                if (isHaven) {
+                    batch.setColor(Color.WHITE);
+                    batch.draw(havenTileTexture, startX + x * tileSize, startY + y * tileSize,
+                            tileSize - 1, tileSize - 1);
+                } else {
+                    if ((x + y) % 2 == 0) batch.setColor(state.boardConfig.tileColorA);
+                    else                  batch.setColor(state.boardConfig.tileColorB);
+                    batch.draw(whitePixel, startX + x * tileSize, startY + y * tileSize,
+                            tileSize - 1, tileSize - 1);
+                }
 
                 // Subtle team color tint on occupied tiles
                 if (c != null && !c.isDead()) {
@@ -1467,6 +1521,7 @@ public class CombatScreen implements Screen {
         clothesTileTexture.dispose();
         cloudTileTexture.dispose();
         lockdownTileTexture.dispose();
+        havenTileTexture.dispose();
         for (Texture t : typeIcons.values())  t.dispose();
         for (Texture t : classIcons.values()) t.dispose();
     }

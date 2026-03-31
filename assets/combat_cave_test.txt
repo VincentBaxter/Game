@@ -1,0 +1,4 @@
+COMBAT_BOARD
+boardType=WIND
+spawn=Stoneguard,3,7
+spawn=Stoneguard,5,7

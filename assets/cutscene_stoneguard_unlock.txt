@@ -1,0 +1,2 @@
+BACKGROUND storybg_forest.png
+SAY Stoneguard: *Angry rock noises, but surprisingly no guitar*

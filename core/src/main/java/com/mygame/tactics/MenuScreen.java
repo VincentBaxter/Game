@@ -3,6 +3,8 @@ package com.mygame.tactics;
 import java.awt.FileDialog;
 import java.awt.Frame;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.Net;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -36,6 +38,17 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 public class MenuScreen implements Screen {
 
     // -----------------------------------------------------------------------
+    // Update check
+    // -----------------------------------------------------------------------
+    private static final String RELEASES_API = "https://api.github.com/repos/VincentBaxter/Game/releases/latest";
+    private static final String RELEASES_URL = "https://github.com/VincentBaxter/Game/releases/latest";
+
+    private boolean updateAvailable  = false;
+    private boolean updateHovered    = false;
+    private String  latestVersion    = null;
+    private final Rectangle btnUpdate = new Rectangle(0, 0, 1280, 32);
+
+    // -----------------------------------------------------------------------
     // Palette
     // -----------------------------------------------------------------------
     private static final Color GOLD = new Color(1.00f, 0.84f, 0.00f, 1f);
@@ -51,7 +64,7 @@ public class MenuScreen implements Screen {
     // -----------------------------------------------------------------------
     // Ornamental rule — sits between title and buttons
     // -----------------------------------------------------------------------
-    private static final float RULE_Y = 502f;
+    private static final float RULE_Y = 480f;
     private static final float RULE_W = 420f;
 
     // -----------------------------------------------------------------------
@@ -108,7 +121,7 @@ public class MenuScreen implements Screen {
     // -----------------------------------------------------------------------
     // Screen lifecycle
     // -----------------------------------------------------------------------
-    @Override public void show()   {}
+    @Override public void show()   { checkForUpdate(); }
     @Override public void resize(int w, int h) { viewport.update(w, h); }
     @Override public void pause()  {}
     @Override public void resume() {}
@@ -131,6 +144,7 @@ public class MenuScreen implements Screen {
         drawButton(game.batch, btnWorld,        "WORLD",         2);
         drawButton(game.batch, btnOnline,       "ONLINE",        3);
         drawButton(game.batch, btnSettings,     "SETTINGS",      4);
+        if (updateAvailable) drawUpdateBanner(game.batch);
 
         game.batch.end();
     }
@@ -154,7 +168,14 @@ public class MenuScreen implements Screen {
         else if (btnSettings    .contains(world.x, world.y)) hoveredBtn = 4;
         else                                                  hoveredBtn = -1;
 
+        updateHovered = updateAvailable && btnUpdate.contains(world.x, world.y);
+
         if (!Gdx.input.justTouched()) return;
+
+        if (updateAvailable && btnUpdate.contains(world.x, world.y)) {
+            Gdx.net.openURI(RELEASES_URL);
+            return;
+        }
 
         if (btnSinglePlayer.contains(world.x, world.y)) {
             game.setScreen(new DraftScreen(game));
@@ -171,6 +192,22 @@ public class MenuScreen implements Screen {
                 } catch (Exception ignored) {}
             }
         } else if (btnOnline.contains(world.x, world.y)) {
+            // Route to tutorial if it hasn't been completed yet
+            if (!Main.flags.is("area_tutorial_complete")) {
+                String[] dirs = {".", "assets", "../assets", "../../assets"};
+                for (String d : dirs) {
+                    FileHandle f = Gdx.files.local(d + "/area_tutorial.txt");
+                    if (f.exists()) {
+                        try {
+                            WorldArea tutorial = WorldArea.load(f);
+                            tutorial.applyOverrides(Main.flags);
+                            game.setScreen(new WorldScreen(game, tutorial));
+                            return;
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+            // Tutorial complete (or file not found) — proceed to character creation
             game.setScreen(new CharacterCreationScreen(game));
         }
         // Settings: TODO
@@ -180,7 +217,7 @@ public class MenuScreen implements Screen {
     // Title
     // -----------------------------------------------------------------------
     private void drawTitle(SpriteBatch b) {
-        String title = "TACTICS";
+        String title = "HAVEN";
         game.font.getData().setScale(TITLE_SCALE);
 
         layout.setText(game.font, title);
@@ -204,7 +241,7 @@ public class MenuScreen implements Screen {
     // -----------------------------------------------------------------------
     private void drawButton(SpriteBatch b, Rectangle r, String label, int idx) {
         boolean hovered = (hoveredBtn == idx);
-        boolean dimmed  = (idx == 3 || idx == 4);
+        boolean dimmed  = (idx == 4);
         float   aw      = 6f;
         Color   ac      = dimmed ? BLUE : GOLD;
         float   acA     = dimmed ? 0.30f : (hovered ? 1.0f : 0.72f);
@@ -327,5 +364,70 @@ public class MenuScreen implements Screen {
         b.draw(whitePixel, rdx + smallR * 0.35f, y - smallR,        1.5f,        smallR * 2f);
 
         b.setColor(Color.WHITE);
+    }
+
+    // -----------------------------------------------------------------------
+    // Update banner
+    // -----------------------------------------------------------------------
+    private void drawUpdateBanner(SpriteBatch b) {
+        float alpha = updateHovered ? 1.0f : 0.85f;
+
+        // Background
+        b.setColor(0.05f, 0.18f, 0.32f, alpha);
+        b.draw(whitePixel, 0, 0, 1280, 32);
+
+        // Top border line
+        b.setColor(BLUE.r, BLUE.g, BLUE.b, alpha);
+        b.draw(whitePixel, 0, 31, 1280, 1);
+
+        // Text
+        String msg = "Update available: v" + Main.VERSION + "  →  v" + latestVersion
+                   + "     Click to download";
+        game.font.getData().setScale(0.42f);
+        game.font.setColor(updateHovered ? Color.WHITE : new Color(0.75f, 0.90f, 1.0f, 1f));
+        layout.setText(game.font, msg);
+        game.font.draw(b, msg, 640f - layout.width / 2f, 21f);
+
+        game.font.getData().setScale(1.0f);
+        game.font.setColor(Color.WHITE);
+        b.setColor(Color.WHITE);
+    }
+
+    // -----------------------------------------------------------------------
+    // Version check
+    // -----------------------------------------------------------------------
+    private void checkForUpdate() {
+        Net.HttpRequest req = new Net.HttpRequest(Net.HttpMethods.GET);
+        req.setUrl(RELEASES_API);
+        req.setHeader("Accept", "application/vnd.github+json");
+        req.setHeader("User-Agent", "HavenGame/" + Main.VERSION);
+        Gdx.net.sendHttpRequest(req, new Net.HttpResponseListener() {
+            @Override
+            public void handleHttpResponse(Net.HttpResponse response) {
+                String tag = extractTagName(response.getResultAsString());
+                if (tag == null) return;
+                String clean = tag.startsWith("v") ? tag.substring(1) : tag;
+                if (!clean.equals(Main.VERSION)) {
+                    Gdx.app.postRunnable(() -> {
+                        latestVersion   = clean;
+                        updateAvailable = true;
+                    });
+                }
+            }
+            @Override public void failed(Throwable t)  {}
+            @Override public void cancelled()           {}
+        });
+    }
+
+    /** Pulls the tag_name value out of the GitHub releases JSON without a full parser. */
+    private static String extractTagName(String json) {
+        String key = "\"tag_name\"";
+        int idx = json.indexOf(key);
+        if (idx < 0) return null;
+        int start = json.indexOf('"', idx + key.length() + 1);
+        if (start < 0) return null;
+        int end = json.indexOf('"', start + 1);
+        if (end < 0) return null;
+        return json.substring(start + 1, end);
     }
 }
