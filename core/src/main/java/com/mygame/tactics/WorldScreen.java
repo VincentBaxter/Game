@@ -168,6 +168,24 @@ public class WorldScreen implements Screen {
             }
             if (!textures.isEmpty()) break;
         }
+        // Fallback for JAR: dir.list() doesn't work on classpath resources,
+        // so load each tile ID used by the current area via Gdx.files.internal().
+        if (textures.isEmpty()) {
+            for (int x = 0; x < area.width; x++) {
+                for (int y = 0; y < area.height; y++) {
+                    loadInternalTexture(area.tiles[x][y].backgroundId);
+                    loadInternalTexture(area.tiles[x][y].objectId);
+                }
+            }
+        }
+    }
+
+    private void loadInternalTexture(String id) {
+        if (id == null || textures.containsKey(id)) return;
+        try {
+            FileHandle f = Gdx.files.internal(id + ".png");
+            if (f.exists()) textures.put(id, new Texture(f));
+        } catch (Exception ignored) {}
     }
 
     // ---- Anchor fixup ----
@@ -409,6 +427,9 @@ public class WorldScreen implements Screen {
             f = Gdx.files.local(d + "/cutscenes/" + filename);
             if (f.exists()) return f;
         }
+        // Fallback: internal (classpath) — works when running from a JAR
+        FileHandle f = Gdx.files.internal(filename);
+        if (f.exists()) return f;
         return null;
     }
 
@@ -495,6 +516,14 @@ public class WorldScreen implements Screen {
                 return;
             }
         }
+        // Fallback: internal (classpath) — works when running from a JAR
+        FileHandle internal = Gdx.files.internal(npc.combatFile);
+        if (internal.exists()) {
+            CombatBoardLoader.Result result = CombatBoardLoader.load(internal);
+            if (result != null)
+                game.setScreen(new DraftScreen(game, result.team2, result.config, returnAction));
+            return;
+        }
         Gdx.app.error("WorldScreen", "NPC combat file not found: " + npc.combatFile);
     }
 
@@ -519,8 +548,6 @@ public class WorldScreen implements Screen {
     private void enterCave() {
         String[] dirs = {".", "assets", "../assets", "../../assets"};
         for (String d : dirs) {
-            FileHandle dir = Gdx.files.local(d);
-            if (!dir.exists() || !dir.isDirectory()) continue;
             FileHandle f = Gdx.files.local(d + "/Cave1.txt");
             if (f.exists()) {
                 try {
@@ -530,6 +557,14 @@ public class WorldScreen implements Screen {
                 return;
             }
         }
+        // Fallback for JAR
+        try {
+            FileHandle f = Gdx.files.internal("Cave1.txt");
+            if (f.exists()) {
+                WorldArea cave = WorldArea.load(f);
+                game.setScreen(new WorldScreen(game, cave, area, playerX, playerY, appearance, client));
+            }
+        } catch (Exception ignored) {}
     }
 
     private void enterCombatCave(String filename) {
@@ -558,6 +593,15 @@ public class WorldScreen implements Screen {
                 return;
             }
         }
+        // Fallback for JAR
+        try {
+            FileHandle f = Gdx.files.internal(filename);
+            if (f.exists()) {
+                CombatBoardLoader.Result result = CombatBoardLoader.load(f);
+                if (result != null)
+                    game.setScreen(new DraftScreen(game, result.team2, result.config, returnAction));
+            }
+        } catch (Exception ignored) {}
     }
 
     // ---- Network message handling ----
@@ -761,6 +805,15 @@ public class WorldScreen implements Screen {
                 }
             } catch (Exception ignored) {}
         }
+        // Fallback for JAR
+        try {
+            FileHandle f = Gdx.files.internal(key + ".png");
+            if (f.exists()) {
+                Texture t = new Texture(f);
+                npcPortraits.put(key, t);
+                return t;
+            }
+        } catch (Exception ignored) {}
         npcPortraits.put(key, null); // cache the miss so we don't retry every frame
         return null;
     }

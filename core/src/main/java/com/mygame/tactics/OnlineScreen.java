@@ -122,6 +122,13 @@ public class OnlineScreen implements Screen {
                 if (area != null) break;
             }
         }
+        // Fallback: internal (classpath) — works when running from a JAR
+        if (area == null) {
+            try {
+                FileHandle f = Gdx.files.internal("Test_Map.txt");
+                if (f.exists()) area = WorldArea.load(f);
+            } catch (Exception ignored) {}
+        }
         if (area == null) {
             state        = State.ERROR;
             errorMessage = "Could not load Test_Map.txt — make sure it is in the assets folder.";
