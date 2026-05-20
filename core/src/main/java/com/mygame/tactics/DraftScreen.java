@@ -570,7 +570,7 @@ public class DraftScreen implements Screen {
         for (int i = 0; i < cardBounds.size; i++) {
             Rectangle r = cardBounds.get(i);
             if (r.contains(world.x, world.y)
-                    && r.y >= GRID_Y_BOT && r.y + r.height <= GRID_Y_TOP) {
+                    && world.y >= GRID_Y_BOT && world.y <= GRID_Y_TOP) {
                 hoveredIndex = i;
                 break;
             }
@@ -703,23 +703,23 @@ public class DraftScreen implements Screen {
         game.font.draw(b, teamNames[0].toUpperCase(), 15, 705);
 
         float t1Y = 658f;
-        for (Character c : team1)                          { drawRosterEntry(b, c, 8,           t1Y, Color.CYAN);   t1Y -= 152f; }
-        for (int i = team1.size; i < PICKS_PER_TEAM; i++) { drawEmptySlot  (b,    8,           t1Y, Color.CYAN);   t1Y -= 152f; }
+        for (Character c : team1)                          { drawRosterEntry(b, c, 8,           t1Y, Color.CYAN);   t1Y -= 130f; }
+        for (int i = team1.size; i < PICKS_PER_TEAM; i++) { drawEmptySlot  (b,    8,           t1Y, Color.CYAN);   t1Y -= 130f; }
 
         float px = 1280 - PANEL_W;
         game.font.setColor(Color.SALMON);
         game.font.draw(b, teamNames[1].toUpperCase(), px + 15, 705);
 
         float t2Y = 658f;
-        for (Character c : team2)                          { drawRosterEntry(b, c, px + 5, t2Y, Color.SALMON); t2Y -= 152f; }
-        for (int i = team2.size; i < PICKS_PER_TEAM; i++) { drawEmptySlot  (b,    px + 5, t2Y, Color.SALMON); t2Y -= 152f; }
+        for (Character c : team2)                          { drawRosterEntry(b, c, px + 5, t2Y, Color.SALMON); t2Y -= 130f; }
+        for (int i = team2.size; i < PICKS_PER_TEAM; i++) { drawEmptySlot  (b,    px + 5, t2Y, Color.SALMON); t2Y -= 130f; }
 
         game.font.getData().setScale(1.0f);
         game.font.setColor(Color.WHITE);
     }
 
     private void drawRosterEntry(SpriteBatch b, Character c, float x, float y, Color tc) {
-        float w = PANEL_W - 18f, h = 140f;
+        float w = PANEL_W - 18f, h = 120f;
         b.setColor(tc.r * 0.18f, tc.g * 0.18f, tc.b * 0.18f, 1f);
         b.draw(whitePixel, x, y - h, w, h);
         b.setColor(tc);
@@ -755,7 +755,7 @@ public class DraftScreen implements Screen {
     }
 
     private void drawEmptySlot(SpriteBatch b, float x, float y, Color tc) {
-        float w = PANEL_W - 18f, h = 140f;
+        float w = PANEL_W - 18f, h = 120f;
         b.setColor(tc.r * 0.06f, tc.g * 0.06f, tc.b * 0.06f, 1f);
         b.draw(whitePixel, x, y - h, w, h);
         b.setColor(tc.r, tc.g, tc.b, 0.18f);
@@ -777,19 +777,22 @@ public class DraftScreen implements Screen {
                 ? ((pickingTeam == 1) ? Color.CYAN : Color.SALMON)
                 : Color.GRAY;
 
-        b.setColor(tc.r, tc.g, tc.b, 0.30f);
-        b.draw(whitePixel, GRID_X, GRID_Y_TOP + 2, GRID_W, 2f);
-        b.setColor(0.07f, 0.07f, 0.10f, 1f);
-        b.draw(whitePixel, GRID_X, GRID_Y_TOP, GRID_W, 720 - GRID_Y_TOP);
-        b.draw(whitePixel, GRID_X, 0,           GRID_W, GRID_Y_BOT);
+        // Gold border around the entire grid area
+        float bw = 3f;
+        b.setColor(1f, 0.84f, 0f, 1f);
+        b.draw(whitePixel, GRID_X - bw,          GRID_Y_BOT - bw, GRID_W + bw * 2, bw);  // bottom
+        b.draw(whitePixel, GRID_X - bw,          GRID_Y_TOP,      GRID_W + bw * 2, bw);  // top
+        b.draw(whitePixel, GRID_X - bw,          GRID_Y_BOT - bw, bw, GRID_Y_TOP - GRID_Y_BOT + bw * 2); // left
+        b.draw(whitePixel, GRID_X + GRID_W,      GRID_Y_BOT - bw, bw, GRID_Y_TOP - GRID_Y_BOT + bw * 2); // right
         b.setColor(Color.WHITE);
 
+        // --- Pass 1: draw all card content FIRST so the mask can clip them cleanly ---
         for (int i = 0; i < pool.size; i++) {
             Character c      = pool.get(i);
             Rectangle bounds = cardBounds.get(i);
             boolean   sel    = (i == hoveredIndex) && myTurn;
 
-            if (bounds.y + bounds.height < GRID_Y_BOT || bounds.y > GRID_Y_TOP) continue;
+            if (bounds.y + bounds.height <= GRID_Y_BOT || bounds.y >= GRID_Y_TOP) continue;
 
             if (sel) {
                 b.setColor(tc);
@@ -819,6 +822,13 @@ public class DraftScreen implements Screen {
             game.font.getData().setScale(1.0f);
             game.font.setColor(Color.WHITE);
         }
+
+        // --- Mask overlays drawn ON TOP of cards to clip them at the grid boundaries ---
+        b.setColor(0.07f, 0.07f, 0.10f, 1f);
+        b.draw(whitePixel, GRID_X, GRID_Y_TOP, GRID_W, 720 - GRID_Y_TOP);
+        b.draw(whitePixel, GRID_X, 0,           GRID_W, GRID_Y_BOT);
+        b.setColor(Color.WHITE);
+
     }
 
     private void drawPickPrompt(SpriteBatch b) {

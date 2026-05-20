@@ -113,28 +113,36 @@ public class OnlineScreen implements Screen {
     }
 
     private void enterWorld() {
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        WorldArea area = null;
-        for (String d : dirs) {
-            FileHandle f = Gdx.files.local(d + "/Test_Map.txt");
-            if (f.exists()) {
-                try { area = WorldArea.load(f); } catch (Exception ignored) {}
-                if (area != null) break;
-            }
-        }
-        // Fallback: internal (classpath) — works when running from a JAR
-        if (area == null) {
-            try {
-                FileHandle f = Gdx.files.internal("Test_Map.txt");
-                if (f.exists()) area = WorldArea.load(f);
-            } catch (Exception ignored) {}
-        }
-        if (area == null) {
+        WorldArea mainMap = loadArea("Test_Map.txt");
+        if (mainMap == null) {
             state        = State.ERROR;
             errorMessage = "Could not load Test_Map.txt — make sure it is in the assets folder.";
             return;
         }
-        game.setScreen(new WorldScreen(game, area, appearance, client));
+
+        // If tutorial not yet complete, spawn into it with the main map as the return area.
+        if (!Main.flags.is("area_tutorial_complete")) {
+            WorldArea tutorial = loadArea("area_tutorial.txt");
+            if (tutorial != null) {
+                tutorial.applyOverrides(Main.flags);
+                // Spawn at the area's defined spawn point; exiting the top row returns to main map.
+                game.setScreen(new WorldScreen(game, tutorial, mainMap, mainMap.spawnX, mainMap.spawnY,
+                        tutorial.spawnX, tutorial.spawnY, appearance, client));
+                return;
+            }
+        }
+
+        mainMap.applyOverrides(Main.flags);
+        game.setScreen(new WorldScreen(game, mainMap, appearance, client));
+    }
+
+    /** Loads a WorldArea by filename from the JAR classpath. */
+    private static WorldArea loadArea(String filename) {
+        try {
+            FileHandle f = Gdx.files.internal(filename);
+            if (f.exists()) return WorldArea.load(f);
+        } catch (Exception ignored) {}
+        return null;
     }
 
     // -----------------------------------------------------------------------

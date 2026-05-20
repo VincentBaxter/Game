@@ -2,6 +2,7 @@ package com.mygame.tactics;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -58,7 +59,31 @@ public class CombatScreen implements Screen {
     private FitViewport        viewport;
     private Texture whitePixel, wallTexture, poisonTileTexture, fireTileTexture,
                     pergolaTileTexture, vinesTileTexture, drywallTileTexture, clothesTileTexture, cloudTileTexture, lockdownTileTexture,
-                    havenTileTexture;
+                    havenTileTexture, windIconTexture;
+
+    // Wind sweep animation state
+    private boolean isAnimatingWind  = false;
+    private float   windSweepTimer   = 0f;
+    private static final float WIND_SWEEP_DURATION = 1.4f;
+    private int windDx, windDy, windPushDist;
+    private static final class WindMoveAnim {
+        final Character unit;
+        final float fromPx, fromPy, toPx, toPy;
+        final float triggerT; // normalized [0,1] time when wind front reaches this char
+        float lerpT = 0f;
+        boolean triggered = false;
+        WindMoveAnim(Character unit, float fromPx, float fromPy, float toPx, float toPy, float triggerT) {
+            this.unit = unit; this.fromPx = fromPx; this.fromPy = fromPy;
+            this.toPx = toPx; this.toPy = toPy; this.triggerT = triggerT;
+        }
+    }
+    private final com.badlogic.gdx.utils.Array<WindMoveAnim> windMoves = new com.badlogic.gdx.utils.Array<>();
+
+    // Music
+    private Music yourTurnMusic;
+    private Music enemyTurnMusic;
+    private Music currentMusic;  // whichever track is currently playing
+
     private Map<Enums.CharType,  Texture> typeIcons  = new HashMap<>();
     private Map<Enums.CharClass, Texture> classIcons = new HashMap<>();
     private Array<DamagePopup> damagePopups = new Array<>();
@@ -447,6 +472,15 @@ public class CombatScreen implements Screen {
         cloudTileTexture = new Texture("cloud_tile.png");
         lockdownTileTexture = new Texture("lockdown_tile.png");
         havenTileTexture = new Texture("tile_haven.png");
+        try { windIconTexture = new Texture("wind_icon.png"); } catch (Exception ignored) {}
+
+        // Music disabled — uncomment to re-enable
+        // try {
+        //     yourTurnMusic  = Gdx.audio.newMusic(Gdx.files.internal("YourTurnMusic.mp3"));
+        //     enemyTurnMusic = Gdx.audio.newMusic(Gdx.files.internal("EnemyTurnMusic.mp3"));
+        //     yourTurnMusic.setLooping(true);
+        //     enemyTurnMusic.setLooping(true);
+        // } catch (Exception ignored) {}
 
         // Type icons
         for (Enums.CharType t : Enums.CharType.values()) {
@@ -467,6 +501,9 @@ public class CombatScreen implements Screen {
     public void render(float delta) {
         stateTime += delta;
 
+        // Keep music volume in sync with global setting (handles live slider changes)
+        if (currentMusic != null) currentMusic.setVolume(Main.musicVolume);
+
         if (state.warningAlpha > 0)
             state.warningAlpha = Math.max(0f, state.warningAlpha - delta * 0.4f);
 
@@ -479,20 +516,39 @@ public class CombatScreen implements Screen {
             }
         }
 
+        // Advance wind sweep animation
+        if (isAnimatingWind) {
+            windSweepTimer += delta;
+            float t = windSweepTimer / WIND_SWEEP_DURATION;
+            for (WindMoveAnim wm : windMoves) {
+                if (!wm.triggered && t >= wm.triggerT) {
+                    wm.triggered = true;
+                }
+                if (wm.triggered && wm.lerpT < 1f) {
+                    wm.lerpT = Math.min(1f, wm.lerpT + delta * 5f);
+                }
+            }
+            if (windSweepTimer >= WIND_SWEEP_DURATION) {
+                isAnimatingWind = false;
+                windMoves.clear();
+            }
+        }
+
         // Tick down the post-ability delay; block input while either it or a
         // move animation is active.
         if (postAbilityDelay > 0f) postAbilityDelay -= delta;
-        if (!isAnimatingMove && postAbilityDelay <= 0f) {
+        if (!isAnimatingMove && !isAnimatingWind && postAbilityDelay <= 0f) {
             if (isBotTurn()) tickBot(delta);
             else { botTimer = 0f; handleInput(); }
         }
 
-        // Detect when it becomes my turn in online play and trigger the flash
-        if (client != null && state.activeUnit != lastSeenActiveUnit) {
-            if (state.activeUnit != null && state.activeUnit.team == myTeam) {
+        // Detect turn change — update flash (online only) and music (all modes)
+        if (state.activeUnit != lastSeenActiveUnit) {
+            if (client != null && state.activeUnit != null && state.activeUnit.team == myTeam) {
                 yourTurnFlash = 1.8f;
             }
             lastSeenActiveUnit = state.activeUnit;
+            updateCombatMusic();
         }
         if (yourTurnFlash > 0f) yourTurnFlash -= delta;
 
@@ -513,6 +569,7 @@ public class CombatScreen implements Screen {
         game.batch.begin();
 
         drawBoard(game.batch);
+        if (isAnimatingWind) drawWindSweep(game.batch);
         drawSidebars(game.batch);
         drawTimeline(game.batch);
         drawAbilityButtons(game.batch);
@@ -555,10 +612,10 @@ public class CombatScreen implements Screen {
             DamagePopup p = damagePopups.get(i);
             p.update(delta);
             if (p.delay <= 0) {
-                if (p.text.contains("HEAL"))       game.font.setColor(Color.GREEN);
+                if (p.text.contains("HEAL"))       game.font.setColor(0.2f, 1f, 0.2f, p.alpha);
                 else if (p.text.contains("MOVE")
-                        || p.text.contains("FREE")) game.font.setColor(Color.CYAN);
-                else                               game.font.setColor(1, 1, 1, p.alpha);
+                        || p.text.contains("FREE")) game.font.setColor(0.2f, 0.9f, 1f, p.alpha);
+                else                               game.font.setColor(1f, 1f, 1f, p.alpha);
                 game.font.getData().setScale(0.7f);
                 game.font.draw(game.batch, p.text, p.x, p.y);
             }
@@ -568,6 +625,33 @@ public class CombatScreen implements Screen {
         game.font.setColor(Color.WHITE);
         game.font.getData().setScale(1.0f);
         game.batch.end();
+    }
+
+    // -----------------------------------------------------------------------
+    // Music
+    // -----------------------------------------------------------------------
+    private void updateCombatMusic() {
+        if (yourTurnMusic == null || enemyTurnMusic == null) return;
+        if (state.activeUnit == null || state.isGameOver()) {
+            stopCombatMusic();
+            return;
+        }
+        // In local/bot play myTeam==0, so treat team 1 as "your" team.
+        int playerTeam = (myTeam == 0) ? 1 : myTeam;
+        Music desired = (state.activeUnit.team == playerTeam) ? yourTurnMusic : enemyTurnMusic;
+        if (desired != currentMusic) {
+            if (currentMusic != null) currentMusic.stop();
+            currentMusic = desired;
+            currentMusic.setVolume(Main.musicVolume);
+            currentMusic.play();
+        } else {
+            // Apply volume changes from settings in real time
+            currentMusic.setVolume(Main.musicVolume);
+        }
+    }
+
+    private void stopCombatMusic() {
+        if (currentMusic != null) { currentMusic.stop(); currentMusic = null; }
     }
 
     // -----------------------------------------------------------------------
@@ -692,12 +776,14 @@ public class CombatScreen implements Screen {
                 if (state.selectedAbility == clicked) {
                     state.selectedAbility = null;
                     state.targetableTiles.clear();
+                    state.reachableTiles.clear();
                 } else {
                     state.selectedAbility = clicked;
-                    if (clicked.getRange() == 0 && !clicked.isDirectionAbility) {
-                        dispatch(new Action.AbilityAction(state.activeUnit.team, i, -1, -1));
-                    } else {
+                    if (!clicked.isDirectionAbility) {
                         engine.calculateTargetRange(state, clicked);
+                    }
+                    if (clicked.grantsMovement) {
+                        engine.calculateMovementRange(state);
                     }
                 }
                 return;
@@ -799,6 +885,7 @@ public class CombatScreen implements Screen {
     }
 
     private void consumeEvents(Array<EngineEvent> events) {
+        int popupIdx = 0; // counts popups in this batch for staggering
         for (EngineEvent e : events) {
             if (e instanceof EngineEvent.PopupEvent) {
                 EngineEvent.PopupEvent pe = (EngineEvent.PopupEvent) e;
@@ -806,8 +893,53 @@ public class CombatScreen implements Screen {
                         : pe.text + " " + pe.value + " " + pe.type;
                 Vector2 pos = getTileScreenPos(pe.tileX, pe.tileY);
                 DamagePopup popup = new DamagePopup(display, pos.x, pos.y);
-                popup.delay = pe.delay;
+
+                // Stagger each popup in this batch so they don't all appear at once
+                popup.delay = pe.delay + popupIdx * 0.15f;
+                popupIdx++;
+
+                // Push popup up if existing active popups are nearby to avoid overlap
+                int nearbyCount = 0;
+                for (int pi = 0; pi < damagePopups.size; pi++) {
+                    DamagePopup existing = damagePopups.get(pi);
+                    if (existing.lifetime > 0.3f
+                            && Math.abs(existing.x - popup.x) < 80
+                            && Math.abs(existing.y - popup.y) < 60) {
+                        nearbyCount++;
+                    }
+                }
+                popup.y += nearbyCount * 28f;
+
                 damagePopups.add(popup);
+
+            } else if (e instanceof EngineEvent.WindSweepEvent) {
+                EngineEvent.WindSweepEvent wse = (EngineEvent.WindSweepEvent) e;
+                windDx = wse.dx; windDy = wse.dy; windPushDist = wse.pushDist;
+                windSweepTimer = 0f;
+                isAnimatingWind = true;
+                windMoves.clear();
+                float tileSize = 58f;
+                int total = 9 + windPushDist; // tiles the front travels
+                for (int i = 0; i < wse.units.length; i++) {
+                    int fx = wse.moves[i][0], fy = wse.moves[i][1];
+                    int tx = wse.moves[i][2], ty = wse.moves[i][3];
+                    // Tile coordinate along the push axis for the front-reach calculation
+                    int charPos = (windDx != 0) ? fx : fy;
+                    float triggerT;
+                    // Leading edge starts at tile `windPushDist` and sweeps across 9 tiles over t=0..1.
+                    // Positive dir (dx>0 / dy>0): leading edge reaches charPos at t=(charPos-windPushDist)/9
+                    // Negative dir (dx<0 / dy<0): leading edge reaches charPos at t=(9-windPushDist-charPos)/9
+                    if (windDx > 0 || windDy > 0)
+                        triggerT = (charPos - windPushDist) / 9f;
+                    else
+                        triggerT = (9 - windPushDist - charPos) / 9f;
+                    triggerT = Math.max(0f, Math.min(1f, triggerT));
+                    float fromPx = BOARD_START_X + fx * tileSize + 5;
+                    float fromPy = BOARD_BOTTOM_Y + fy * tileSize + 5;
+                    float toPx   = BOARD_START_X + tx * tileSize + 5;
+                    float toPy   = BOARD_BOTTOM_Y + ty * tileSize + 5;
+                    windMoves.add(new WindMoveAnim(wse.units[i], fromPx, fromPy, toPx, toPy, triggerT));
+                }
 
             } else if (e instanceof EngineEvent.MoveAnimationEvent) {
                 EngineEvent.MoveAnimationEvent mae = (EngineEvent.MoveAnimationEvent) e;
@@ -825,6 +957,7 @@ public class CombatScreen implements Screen {
             } else if (e instanceof EngineEvent.GameOverEvent) {
                 // state.phase is already GAME_OVER; start a delay before showing the overlay.
                 gameOverDisplayDelay = 3.0f;
+                stopCombatMusic();
             } else if (e instanceof EngineEvent.PortraitChangeEvent) {
                 EngineEvent.PortraitChangeEvent pce = (EngineEvent.PortraitChangeEvent) e;
                 try {
@@ -894,6 +1027,81 @@ public class CombatScreen implements Screen {
                 game.setScreen(new MenuScreen(game));
             }
         }
+    }
+
+    /**
+     * Draws the wind-icon band sweeping across the board during a WindSweepEvent.
+     * The band starts flush against the entry edge of the board and sweeps to the
+     * exit edge over WIND_SWEEP_DURATION seconds.  It is windPushDist tiles wide.
+     * The icon is rotated to face the push direction (default = right).
+     */
+    private void drawWindSweep(SpriteBatch batch) {
+        if (windIconTexture == null) return;
+        float tileSize = 58f;
+        float t = Math.min(windSweepTimer / WIND_SWEEP_DURATION, 1f);
+        float half = tileSize / 2f;
+        int iw = windIconTexture.getWidth(), ih = windIconTexture.getHeight();
+
+        // Rotation: icon default faces right. CCW rotations for other directions.
+        float rotation;
+        if      (windDx > 0) rotation =   0f;  // right
+        else if (windDy < 0) rotation =  90f;  // down
+        else if (windDx < 0) rotation = 180f;  // left
+        else                 rotation = 270f;  // up  (windDy > 0)
+
+        batch.setColor(1f, 1f, 1f, 0.80f);
+
+        if (windDx > 0) {
+            // Band starts at left edge, moves right. Trailing = t*9, Leading = windPushDist+t*9
+            float trailTile = t * 9f;
+            float leadTile  = windPushDist + t * 9f;
+            for (int col = 0; col < 9; col++) {
+                if (col < trailTile || col >= leadTile) continue;
+                float px = BOARD_START_X + col * tileSize;
+                for (int row = 0; row < 9; row++) {
+                    float py = BOARD_BOTTOM_Y + row * tileSize;
+                    batch.draw(windIconTexture, px, py, half, half, tileSize, tileSize, 1f, 1f, rotation, 0, 0, iw, ih, false, false);
+                }
+            }
+        } else if (windDx < 0) {
+            // Band starts at right edge, moves left. Leading (left edge) = 9-windPushDist-t*9
+            float trailTile = 9f - t * 9f;          // right edge of band
+            float leadTile  = 9f - windPushDist - t * 9f; // left edge (the front)
+            for (int col = 0; col < 9; col++) {
+                if (col < leadTile || col >= trailTile) continue;
+                float px = BOARD_START_X + col * tileSize;
+                for (int row = 0; row < 9; row++) {
+                    float py = BOARD_BOTTOM_Y + row * tileSize;
+                    batch.draw(windIconTexture, px, py, half, half, tileSize, tileSize, 1f, 1f, rotation, 0, 0, iw, ih, false, false);
+                }
+            }
+        } else if (windDy > 0) {
+            // Band starts at bottom edge, moves up.
+            float trailTile = t * 9f;
+            float leadTile  = windPushDist + t * 9f;
+            for (int row = 0; row < 9; row++) {
+                if (row < trailTile || row >= leadTile) continue;
+                float py = BOARD_BOTTOM_Y + row * tileSize;
+                for (int col = 0; col < 9; col++) {
+                    float px = BOARD_START_X + col * tileSize;
+                    batch.draw(windIconTexture, px, py, half, half, tileSize, tileSize, 1f, 1f, rotation, 0, 0, iw, ih, false, false);
+                }
+            }
+        } else { // windDy < 0
+            // Band starts at top edge, moves down.
+            float trailTile = 9f - t * 9f;
+            float leadTile  = 9f - windPushDist - t * 9f;
+            for (int row = 0; row < 9; row++) {
+                if (row < leadTile || row >= trailTile) continue;
+                float py = BOARD_BOTTOM_Y + row * tileSize;
+                for (int col = 0; col < 9; col++) {
+                    float px = BOARD_START_X + col * tileSize;
+                    batch.draw(windIconTexture, px, py, half, half, tileSize, tileSize, 1f, 1f, rotation, 0, 0, iw, ih, false, false);
+                }
+            }
+        }
+
+        batch.setColor(1f, 1f, 1f, 1f);
     }
 
     private void drawBoard(SpriteBatch batch) {
@@ -1038,12 +1246,24 @@ public class CombatScreen implements Screen {
                 float drawX = startX + chr.x * tileSize + 5;
                 float drawY = startY + chr.y * tileSize + 5;
 
-                if (chr == state.activeUnit && !isAnimatingMove)
+                // Override position during wind sweep animation
+                if (isAnimatingWind) {
+                    for (WindMoveAnim wm : windMoves) {
+                        if (wm.unit == chr) {
+                            float lt = wm.lerpT;
+                            drawX = wm.fromPx + (wm.toPx - wm.fromPx) * lt;
+                            drawY = wm.fromPy + (wm.toPy - wm.fromPy) * lt;
+                            break;
+                        }
+                    }
+                }
+
+                if (chr == state.activeUnit && !isAnimatingMove && !isAnimatingWind)
                     drawY += Math.sin(stateTime * 6.0f) * 5.0f;
                 boolean isEnemy = state.activeUnit != null
                         && chr.team != state.activeUnit.team;
                 if (state.isBattle() && state.turnPhase == GameState.TurnPhase.ABILITY
-                        && isEnemy && !isAnimatingMove)
+                        && isEnemy && !isAnimatingMove && !isAnimatingWind)
                     drawX += Math.sin(stateTime * 3.0f) * 3.0f;
                 if (chr == animatingUnit && isAnimatingMove) {
                     float vX = moveStart.x + (moveTarget.x - moveStart.x) * moveLerp;
@@ -1244,11 +1464,17 @@ public class CombatScreen implements Screen {
         float hpTextY = barTop - HP_BAR_H / 2f + 5f;
         game.font.draw(b, hp, cx, hpTextY, cw, 1, false);
 
-        // Stats
+        // Stats — each drawn individually with its own colour
         game.font.getData().setScale(0.50f);
-        game.font.setColor(new Color(0.85f,0.85f,0.85f,1f));
-        game.font.draw(b, "ATK:"+c.getAtk()+"   ARM:"+c.getArmor(), cx, stats1Y);
-        game.font.draw(b, "MAG:"+c.getMag()+"   CLK:"+c.getCloak(), cx, stats2Y);
+        float statCol2 = cx + 120f;
+        game.font.setColor(0.90f, 0.25f, 0.25f, 1f);  // red
+        game.font.draw(b, "ATK:" + c.getAtk(), cx, stats1Y);
+        game.font.setColor(0.78f, 0.62f, 0.38f, 1f);  // beige/brown
+        game.font.draw(b, "ARM:" + c.getArmor(), statCol2, stats1Y);
+        game.font.setColor(0.70f, 0.30f, 0.90f, 1f);  // purple
+        game.font.draw(b, "MAG:" + c.getMag(), cx, stats2Y);
+        game.font.setColor(0.30f, 0.55f, 0.95f, 1f);  // blue
+        game.font.draw(b, "CLK:" + c.getCloak(), statCol2, stats2Y);
 
         // Wait
         game.font.getData().setScale(0.48f);
@@ -1512,8 +1738,11 @@ public class CombatScreen implements Screen {
     @Override public void resize(int w, int h) { viewport.update(w, h); }
     @Override public void pause()  {}
     @Override public void resume() {}
-    @Override public void hide()   {}
+    @Override public void hide() { stopCombatMusic(); }
     @Override public void dispose() {
+        stopCombatMusic();
+        if (yourTurnMusic  != null) yourTurnMusic.dispose();
+        if (enemyTurnMusic != null) enemyTurnMusic.dispose();
         whitePixel.dispose();
         pergolaTileTexture.dispose();
         vinesTileTexture.dispose();

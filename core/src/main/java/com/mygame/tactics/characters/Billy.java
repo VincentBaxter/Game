@@ -134,6 +134,7 @@ public class Billy extends Character {
             super("Snake In The Grass",
                     "Turn invisible and move once. Stealth persists after the move.",
                     0, false);
+            this.grantsMovement = true;
         }
 
         @Override

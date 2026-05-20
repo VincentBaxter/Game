@@ -89,7 +89,7 @@ public class CharacterCreationScreen implements Screen {
     private final Texture            whitePixel;
     private final GlyphLayout        layout = new GlyphLayout();
 
-    private final PlayerAppearance   appearance = new PlayerAppearance();
+    private final PlayerAppearance   appearance = loadSavedAppearance();
 
     private boolean usernameActive  = false;
     private float   cursorBlink     = 0f;
@@ -155,6 +155,7 @@ public class CharacterCreationScreen implements Screen {
             // Continue button
             if (wx >= CONT_X && wx < CONT_X + CONT_W && wy >= CONT_Y && wy < CONT_Y + CONT_H) {
                 if (appearance.username.trim().isEmpty()) appearance.username = "Player";
+                saveAppearance(appearance);
                 game.setScreen(new OnlineScreen(game, new NetworkClient(), appearance));
             }
 
@@ -437,4 +438,22 @@ public class CharacterCreationScreen implements Screen {
 
     /** Shorthand to avoid repeating game.batch everywhere. */
     private SpriteBatch b() { return game.batch; }
+
+    private static PlayerAppearance loadSavedAppearance() {
+        PlayerAppearance ap = new PlayerAppearance();
+        ap.username      = Main.flags.getString("ap_username", "Player");
+        ap.modelType     = Main.flags.get("ap_modelType");
+        ap.skinColorIdx  = Main.flags.get("ap_skinColorIdx");
+        ap.shirtColorIdx = Main.flags.get("ap_shirtColorIdx");
+        ap.pantsColorIdx = Main.flags.get("ap_pantsColorIdx");
+        return ap;
+    }
+
+    private static void saveAppearance(PlayerAppearance ap) {
+        Main.flags.setString("ap_username",      ap.username);
+        Main.flags.set("ap_modelType",     ap.modelType);
+        Main.flags.set("ap_skinColorIdx",  ap.skinColorIdx);
+        Main.flags.set("ap_shirtColorIdx", ap.shirtColorIdx);
+        Main.flags.set("ap_pantsColorIdx", ap.pantsColorIdx);
+    }
 }

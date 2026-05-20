@@ -89,6 +89,22 @@ public abstract class EngineEvent {
     }
 
     /**
+     * Emitted by triggerWindPush so CombatScreen can animate wind icons
+     * sweeping across the board and move characters as the wind reaches them.
+     */
+    public static class WindSweepEvent extends EngineEvent {
+        public final int dx, dy;         // push direction (-1, 0, or 1)
+        public final int pushDist;       // tiles pushed; also the icon band width
+        /** Per-character move: {fromTileX, fromTileY, toTileX, toTileY, characterIndex} */
+        public final int[][] moves;      // [i] = {fromX, fromY, toX, toY}
+        public final Character[] units;  // parallel array — unit[i] moved from moves[i]
+        public WindSweepEvent(int dx, int dy, int pushDist, Character[] units, int[][] moves) {
+            this.dx = dx; this.dy = dy; this.pushDist = pushDist;
+            this.units = units; this.moves = moves;
+        }
+    }
+
+    /**
      * Emitted by abilities that want to relocate the Haven.
      * GameEngine consumes this in executeAbility() and calls moveHaven() so
      * the occupant bonus is correctly stripped before the Haven tile changes.

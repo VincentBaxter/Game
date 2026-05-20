@@ -19,30 +19,7 @@ import com.mygame.tactics.GameEngine;
 import com.mygame.tactics.GameState;
 import com.mygame.tactics.NetworkAction;
 import com.mygame.tactics.NetworkMessage;
-import com.mygame.tactics.characters.Aevan;
-import com.mygame.tactics.characters.Aaron;
-import com.mygame.tactics.characters.Anna;
-import com.mygame.tactics.characters.Ben;
-import com.mygame.tactics.characters.Billy;
-import com.mygame.tactics.characters.Brad;
-import com.mygame.tactics.characters.Emily;
-import com.mygame.tactics.characters.Evan;
-import com.mygame.tactics.characters.Ghia;
-import com.mygame.tactics.characters.GuardTower;
-import com.mygame.tactics.characters.Hunter;
-import com.mygame.tactics.characters.Jaxon;
-import com.mygame.tactics.characters.Lark;
-import com.mygame.tactics.characters.Luke;
-import com.mygame.tactics.characters.Mason;
-import com.mygame.tactics.characters.Maxx;
-import com.mygame.tactics.characters.Nathan;
-import com.mygame.tactics.characters.Sean;
-import com.mygame.tactics.characters.Snowguard;
-import com.mygame.tactics.characters.Speen;
-import com.mygame.tactics.characters.Stoneguard;
-import com.mygame.tactics.characters.Thomas;
-import com.mygame.tactics.characters.Tyler;
-import com.mygame.tactics.characters.Weirdguard;
+import com.mygame.tactics.CharacterRoster;
 import com.badlogic.gdx.utils.Array;
 
 /**
@@ -526,35 +503,7 @@ public class GameServer {
     // -----------------------------------------------------------------------
 
     private static Character buildCharacter(String name) {
-        switch (name) {
-            case "Aaron":      return new Aaron(null);
-            case "Aevan":      return new Aevan(null);
-            case "Anna":       return new Anna(null);
-            case "Ben":        return new Ben(null);
-            case "Billy":      return new Billy(null);
-            case "Brad":       return new Brad(null);
-            case "Emily":      return new Emily(null);
-            case "Evan":       return new Evan(null);
-            case "Ghia":       return new Ghia(null);
-            case "GuardTower": return new GuardTower(null);
-            case "Hunter":     return new Hunter(null);
-            case "Jaxon":      return new Jaxon(null);
-            case "Lark":       return new Lark(null);
-            case "Luke":       return new Luke(null);
-            case "Mason":      return new Mason(null);
-            case "Maxx":       return new Maxx(null);
-            case "Nathan":     return new Nathan(null);
-            case "Sean":       return new Sean(null);
-            case "Snowguard":  return new Snowguard(null);
-            case "Speen":      return new Speen(null);
-            case "Stoneguard": return new Stoneguard(null);
-            case "Thomas":     return new Thomas(null);
-            case "Tyler":      return new Tyler(null);
-            case "Weirdguard": return new Weirdguard(null);
-            default:
-                System.out.println("WARNING: unknown character name: " + name);
-                return null;
-        }
+        return CharacterRoster.build(name);
     }
 
     private static BoardConfig boardConfigFor(BoardConfig.BoardType type) {
@@ -571,11 +520,7 @@ public class GameServer {
 
     public static class GameRoom {
         public static final int      PICKS_PER_TEAM      = 4;
-        public static final String[] ALL_CHARACTER_NAMES = {
-            "Hunter", "Sean", "Jaxon", "Evan", "Billy", "Aaron", "Speen", "Mason",
-            "Lark", "Nathan", "Luke", "Brad", "GuardTower", "Weirdguard", "Stoneguard",
-            "Snowguard", "Tyler", "Anna", "Emily", "Thomas", "Ghia", "Maxx", "Ben", "Aevan"
-        };
+        public static final String[] ALL_CHARACTER_NAMES = CharacterRoster.NAMES;
 
         public final String     gameId;
         public final Connection player1;

@@ -67,6 +67,7 @@ public class Evan extends Character {
     public static class Marathon extends Ability {
         public Marathon() {
             super("Marathon", "Move again immediately.", 0, false);
+            this.grantsMovement = true;
         }
 
         @Override

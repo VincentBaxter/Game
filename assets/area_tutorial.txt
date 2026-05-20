@@ -1,8 +1,8 @@
 areaId=area_tutorial
 width=20
 height=20
-spawnX=-1
-spawnY=-1
+spawnX=8
+spawnY=14
 tile_grass1,map_tree1,0,0,-,1
 tile_grass2,map_tree1,0,0,-,1
 tile_grass1,map_tree1,0,0,-,1
@@ -110,7 +110,7 @@ tile_grass1,-,1,0,-,0
 tile_stone2,-,1,0,-,0
 tile_stone2,map_stone1,0,0,-,1
 tile_stone2,-,1,0,-,0
-tile_grass1,-,1,0,-,0
+tile_stone1,-,1,0,-,0
 tile_stone2,-,1,0,-,0
 tile_grass1,-,1,0,-,0
 tile_grass2,-,1,0,-,0
@@ -391,8 +391,8 @@ tile_grass2,map_tree1,0,0,-,0
 tile_grass1,map_tree1,0,0,-,0
 tile_grass2,map_tree1,0,0,-,0
 tile_grass1,map_tree1,0,0,-,0
-tile_path1,map_tree1,0,0,-,0
-tile_path1,map_tree1,0,0,-,0
+tile_path1,map_tree1,0,1,-,0
+tile_path1,map_tree1,0,1,-,0
 tile_grass2,map_tree1,0,0,-,0
 tile_grass1,map_tree1,0,0,-,0
 tile_grass2,map_tree1,0,0,-,0
@@ -403,6 +403,14 @@ tile_grass2,map_tree1,0,0,-,0
 tile_grass1,map_tree1,0,0,-,0
 tile_grass2,map_tree1,0,0,-,0
 tile_grass1,map_tree1,0,0,-,0
+override=area_tutorial_complete,>=,1,8,16,obj,-
+override=area_tutorial_complete,>=,1,9,16,obj,-
+override=area_tutorial_complete,>=,1,8,17,obj,-
+override=area_tutorial_complete,>=,1,9,17,obj,-
+override=area_tutorial_complete,>=,1,8,18,obj,-
+override=area_tutorial_complete,>=,1,9,18,obj,-
+override=area_tutorial_complete,>=,1,8,19,obj,-
+override=area_tutorial_complete,>=,1,9,19,obj,-
 npc=Fescue,9,5,1,cutscene_fescue_unlock,combat_board_fescue_unlock.txt,fescue_beaten
 npc=Sean,11,5,1,cutscene_sean_unlock,combat_board_sean_unlock.txt,sean_beaten
 npc=Stoneguard,7,5,1,cutscene_stoneguard_unlock,combat_board_stoneguard_unlock.txt,stoneguard_beaten

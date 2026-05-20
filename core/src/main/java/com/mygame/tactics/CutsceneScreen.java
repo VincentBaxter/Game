@@ -432,29 +432,23 @@ public class CutsceneScreen implements Screen {
     private Texture getPortrait(String speaker) {
         String key = speaker.toLowerCase();
         if (portraitCache.containsKey(key)) return portraitCache.get(key);
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            try {
-                com.badlogic.gdx.files.FileHandle fh = Gdx.files.local(d + "/" + key + ".png");
-                if (fh.exists()) {
-                    Texture t = new Texture(fh);
-                    portraitCache.put(key, t);
-                    return t;
-                }
-            } catch (Exception ignored) {}
-        }
+        try {
+            com.badlogic.gdx.files.FileHandle fh = Gdx.files.internal(key + ".png");
+            if (fh.exists()) {
+                Texture t = new Texture(fh);
+                portraitCache.put(key, t);
+                return t;
+            }
+        } catch (Exception ignored) {}
         portraitCache.put(key, null);
         return null;
     }
 
     private Texture loadTexture(String path) {
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            try {
-                com.badlogic.gdx.files.FileHandle fh = Gdx.files.local(d + "/" + path);
-                if (fh.exists()) return new Texture(fh);
-            } catch (Exception ignored) {}
-        }
+        try {
+            com.badlogic.gdx.files.FileHandle fh = Gdx.files.internal(path);
+            if (fh.exists()) return new Texture(fh);
+        } catch (Exception ignored) {}
         Gdx.app.error("CutsceneScreen", "Texture not found: " + path);
         return null;
     }

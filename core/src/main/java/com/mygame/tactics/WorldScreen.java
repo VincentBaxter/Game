@@ -103,7 +103,7 @@ public class WorldScreen implements Screen {
     }
 
     /** Full constructor. spawnX/Y = -1 → auto-find nearest walkable to centre. */
-    private WorldScreen(Main game, WorldArea area,
+    public WorldScreen(Main game, WorldArea area,
                         WorldArea returnArea, int returnX, int returnY,
                         int spawnX, int spawnY, PlayerAppearance appearance,
                         NetworkClient client) {
@@ -155,36 +155,17 @@ public class WorldScreen implements Screen {
     // ---- Texture loading ----
 
     private void loadTextures() {
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            FileHandle dir = Gdx.files.local(d);
-            if (!dir.exists() || !dir.isDirectory()) continue;
-            for (FileHandle f : dir.list(".png")) {
-                String id = f.nameWithoutExtension();
-                if (!id.startsWith("tile_") && !id.startsWith("map_") && !id.startsWith("building_")) continue;
-                if (!textures.containsKey(id)) {
-                    try { textures.put(id, new Texture(f)); } catch (Exception ignored) {}
-                }
-            }
-            if (!textures.isEmpty()) break;
-        }
-        // Fallback for JAR: dir.list() doesn't work on classpath resources,
-        // so load each tile ID used by the current area via Gdx.files.internal().
-        if (textures.isEmpty()) {
-            for (int x = 0; x < area.width; x++) {
-                for (int y = 0; y < area.height; y++) {
-                    loadInternalTexture(area.tiles[x][y].backgroundId);
-                    loadInternalTexture(area.tiles[x][y].objectId);
-                }
-            }
-        }
-    }
-
-    private void loadInternalTexture(String id) {
-        if (id == null || textures.containsKey(id)) return;
+        // Load all tile/map/building textures from tile_manifest.txt.
+        // Works in both Eclipse (classpath on disk) and JAR (embedded classpath).
         try {
-            FileHandle f = Gdx.files.internal(id + ".png");
-            if (f.exists()) textures.put(id, new Texture(f));
+            FileHandle manifest = Gdx.files.internal("tile_manifest.txt");
+            if (manifest.exists()) {
+                for (String id : manifest.readString().split("\\r?\\n")) {
+                    if (id.isEmpty() || textures.containsKey(id)) continue;
+                    try { textures.put(id, new Texture(Gdx.files.internal(id + ".png"))); }
+                    catch (Exception ignored) {}
+                }
+            }
         } catch (Exception ignored) {}
     }
 
@@ -381,13 +362,33 @@ public class WorldScreen implements Screen {
             return;
         }
 
-        // Bottom-row exit tile: return to the previous area, spawning at the stored position
-        if (returnArea != null && nearbyTileY == 0) {
+        // Edge-row exit tile: return to the previous area, spawning at the stored position
+        if (returnArea != null && (nearbyTileY == 0 || nearbyTileY == area.height - 1)) {
             game.setScreen(new WorldScreen(game, returnArea, null, -1, -1, returnX, returnY, appearance, client));
             return;
         }
 
-        if (nearbyTile.objectId == null) return;
+        // Generic area transition: if triggerAreaId points to a WorldArea file, load and enter it
+        if (nearbyTile.triggerAreaId != null) {
+            FileHandle areaFile = findAssetFile(nearbyTile.triggerAreaId + ".txt");
+            if (areaFile != null) {
+                try {
+                    WorldArea dest = WorldArea.load(areaFile);
+                    game.setScreen(new WorldScreen(game, dest, area, playerX, playerY,
+                            dest.spawnX, dest.spawnY, appearance, client));
+                    return;
+                } catch (Exception ignored) {}
+                // File found but not a WorldArea — fall through to cutscene/object handling
+            }
+        }
+
+        // No objectId and no specific trigger — if we're in a sub-area, return to previous area
+        if (nearbyTile.objectId == null) {
+            if (returnArea != null) {
+                game.setScreen(new WorldScreen(game, returnArea, null, -1, -1, returnX, returnY, appearance, client));
+            }
+            return;
+        }
         String obj = nearbyTile.objectId;
 
         if (obj.startsWith("building_fountain")) {
@@ -410,7 +411,20 @@ public class WorldScreen implements Screen {
             playCutsceneThen(nearbyTile, this::enterCave);
             return;
         }
-        // Other buildings: placeholder for future content
+        // Generic building → area transition: building_bar → area_bar.txt, etc.
+        if (obj.startsWith("building_")) {
+            String areaName = "area_" + obj.substring("building_".length());
+            FileHandle areaFile = findAssetFile(areaName + ".txt");
+            if (areaFile != null) {
+                try {
+                    WorldArea dest = WorldArea.load(areaFile);
+                    game.setScreen(new WorldScreen(game, dest, area, playerX, playerY,
+                            dest.spawnX, dest.spawnY, appearance, client));
+                } catch (Exception e) {
+                    Gdx.app.error("WorldScreen", "Failed to load area: " + areaName + " — " + e.getMessage());
+                }
+            }
+        }
     }
 
     /**
@@ -420,15 +434,9 @@ public class WorldScreen implements Screen {
      * Returns the first FileHandle that exists, or null if not found.
      */
     private FileHandle findAssetFile(String filename) {
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            FileHandle f = Gdx.files.local(d + "/" + filename);
-            if (f.exists()) return f;
-            f = Gdx.files.local(d + "/cutscenes/" + filename);
-            if (f.exists()) return f;
-        }
-        // Fallback: internal (classpath) — works when running from a JAR
         FileHandle f = Gdx.files.internal(filename);
+        if (f.exists()) return f;
+        f = Gdx.files.internal("cutscenes/" + filename);
         if (f.exists()) return f;
         return null;
     }
@@ -484,12 +492,16 @@ public class WorldScreen implements Screen {
      * and returns to this area (reloading from disk so flag-based tile overrides apply).
      */
     private void launchNpcCombat(WorldArea.WorldNpc npc) {
-        final WorldArea        savedArea   = area;
-        final int              savedX      = playerX;
-        final int              savedY      = playerY;
-        final PlayerAppearance savedApp    = appearance;
-        final NetworkClient    savedClient = client;
-        final String           winFlagKey  = npc.winFlag;
+        final WorldArea        savedArea       = area;
+        final int              savedX          = playerX;
+        final int              savedY          = playerY;
+        final PlayerAppearance savedApp        = appearance;
+        final NetworkClient    savedClient     = client;
+        final WorldArea        savedReturnArea = returnArea;
+        final int              savedReturnX    = returnX;
+        final int              savedReturnY    = returnY;
+        final String           winFlagKey      = npc.winFlag;
+        final String           triggerAreaId   = npc.triggerAreaId;
 
         Runnable returnAction = () -> {
             if (winFlagKey != null && !winFlagKey.isEmpty()) {
@@ -499,32 +511,39 @@ public class WorldScreen implements Screen {
             // Reload the area from disk so flag overrides (e.g. tree removal) take effect
             WorldArea freshArea = savedArea;
             if (savedArea.sourceFile != null) {
-                try { freshArea = WorldArea.load(Gdx.files.absolute(savedArea.sourceFile)); }
+                try { freshArea = WorldArea.load(Gdx.files.internal(savedArea.sourceFile)); }
                 catch (Exception ignored) {}
             }
             freshArea.applyOverrides(Main.flags);
-            game.setScreen(new WorldScreen(game, freshArea, savedX, savedY, savedApp, savedClient));
+            final WorldArea areaToShow = freshArea;
+            Runnable goToWorld = () -> game.setScreen(
+                    new WorldScreen(game, areaToShow, savedReturnArea, savedReturnX, savedReturnY,
+                            savedX, savedY, savedApp, savedClient));
+
+            // Play post-combat cutscene if one exists (e.g. cutscene_sean_unlock_post.txt)
+            if (triggerAreaId != null) {
+                FileHandle postFile = findAssetFile(triggerAreaId + "_post.txt");
+                if (postFile != null) {
+                    try {
+                        CutsceneData data = CutsceneData.load(postFile);
+                        game.setScreen(new CutsceneScreen(game, data, Main.flags, goToWorld));
+                        return;
+                    } catch (Exception e) {
+                        Gdx.app.error("WorldScreen", "Post cutscene load failed: " + e.getMessage());
+                    }
+                }
+            }
+            goToWorld.run();
         };
 
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            FileHandle f = Gdx.files.local(d + "/" + npc.combatFile);
-            if (f.exists()) {
-                CombatBoardLoader.Result result = CombatBoardLoader.load(f);
-                if (result != null)
-                    game.setScreen(new DraftScreen(game, result.team2, result.config, returnAction));
-                return;
-            }
-        }
-        // Fallback: internal (classpath) — works when running from a JAR
-        FileHandle internal = Gdx.files.internal(npc.combatFile);
-        if (internal.exists()) {
-            CombatBoardLoader.Result result = CombatBoardLoader.load(internal);
+        FileHandle f = Gdx.files.internal(npc.combatFile);
+        if (f.exists()) {
+            CombatBoardLoader.Result result = CombatBoardLoader.load(f);
             if (result != null)
                 game.setScreen(new DraftScreen(game, result.team2, result.config, returnAction));
-            return;
+        } else {
+            Gdx.app.error("WorldScreen", "NPC combat file not found: " + npc.combatFile);
         }
-        Gdx.app.error("WorldScreen", "NPC combat file not found: " + npc.combatFile);
     }
 
     /**
@@ -546,18 +565,6 @@ public class WorldScreen implements Screen {
     }
 
     private void enterCave() {
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            FileHandle f = Gdx.files.local(d + "/Cave1.txt");
-            if (f.exists()) {
-                try {
-                    WorldArea cave = WorldArea.load(f);
-                    game.setScreen(new WorldScreen(game, cave, area, playerX, playerY, appearance, client));
-                } catch (Exception ignored) {}
-                return;
-            }
-        }
-        // Fallback for JAR
         try {
             FileHandle f = Gdx.files.internal("Cave1.txt");
             if (f.exists()) {
@@ -583,17 +590,6 @@ public class WorldScreen implements Screen {
             game.setScreen(new WorldScreen(game, freshArea, savedX, savedY, savedApp, savedClient));
         };
 
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            FileHandle f = Gdx.files.local(d + "/" + filename);
-            if (f.exists()) {
-                CombatBoardLoader.Result result = CombatBoardLoader.load(f);
-                if (result != null)
-                    game.setScreen(new DraftScreen(game, result.team2, result.config, returnAction));
-                return;
-            }
-        }
-        // Fallback for JAR
         try {
             FileHandle f = Gdx.files.internal(filename);
             if (f.exists()) {
@@ -794,18 +790,6 @@ public class WorldScreen implements Screen {
     private Texture getPortrait(String charName) {
         String key = charName.toLowerCase();
         if (npcPortraits.containsKey(key)) return npcPortraits.get(key);
-        String[] dirs = {".", "assets", "../assets", "../../assets"};
-        for (String d : dirs) {
-            try {
-                FileHandle f = Gdx.files.local(d + "/" + key + ".png");
-                if (f.exists()) {
-                    Texture t = new Texture(f);
-                    npcPortraits.put(key, t);
-                    return t;
-                }
-            } catch (Exception ignored) {}
-        }
-        // Fallback for JAR
         try {
             FileHandle f = Gdx.files.internal(key + ".png");
             if (f.exists()) {
@@ -1033,7 +1017,7 @@ public class WorldScreen implements Screen {
 
     private String interactionLabel(WorldTile tile) {
         if ("online_exit".equals(tile.triggerAreaId))        return "[E] Enter Online World";
-        if (returnArea != null && nearbyTileY == 0)          return "[E] Exit Cave";
+        if (returnArea != null && (nearbyTileY == 0 || nearbyTileY == area.height - 1)) return "[E] Exit";
         if (tile.objectId == null)                           return "[E] Interact";
         if (tile.objectId.startsWith("building_fountain"))   return "[E] Search for Ranked Match";
         if (tile.objectId.startsWith("building_bar"))        return "[E] Enter Bar";

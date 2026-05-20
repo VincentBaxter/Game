@@ -208,8 +208,13 @@ public class WorldArea {
             if (!flags.check(ov.flagKey, ov.op, ov.threshold)) continue;
             if (ov.x < 0 || ov.x >= width || ov.y < 0 || ov.y >= height) continue;
             WorldTile t = tiles[ov.x][ov.y];
-            if ("bg".equals(ov.layer))  t.backgroundId = ov.tileId;
-            else                        t.objectId     = ov.tileId;
+            if ("bg".equals(ov.layer)) {
+                t.backgroundId = ov.tileId;
+            } else {
+                t.objectId = ov.tileId;
+                // If the object was removed, make the tile walkable again.
+                if (ov.tileId == null) t.walkable = true;
+            }
         }
     }
 }

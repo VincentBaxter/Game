@@ -14,30 +14,7 @@ import com.mygame.tactics.NetworkAction;
 import com.mygame.tactics.NetworkMessage;
 import com.mygame.tactics.Tile;
 import com.mygame.tactics.Timeline;
-import com.mygame.tactics.characters.Aevan;
-import com.mygame.tactics.characters.Aaron;
-import com.mygame.tactics.characters.Anna;
-import com.mygame.tactics.characters.Ben;
-import com.mygame.tactics.characters.Billy;
-import com.mygame.tactics.characters.Brad;
-import com.mygame.tactics.characters.Emily;
-import com.mygame.tactics.characters.Evan;
-import com.mygame.tactics.characters.Ghia;
-import com.mygame.tactics.characters.GuardTower;
-import com.mygame.tactics.characters.Hunter;
-import com.mygame.tactics.characters.Jaxon;
-import com.mygame.tactics.characters.Lark;
-import com.mygame.tactics.characters.Luke;
-import com.mygame.tactics.characters.Mason;
-import com.mygame.tactics.characters.Maxx;
-import com.mygame.tactics.characters.Nathan;
-import com.mygame.tactics.characters.Sean;
-import com.mygame.tactics.characters.Snowguard;
-import com.mygame.tactics.characters.Speen;
-import com.mygame.tactics.characters.Stoneguard;
-import com.mygame.tactics.characters.Thomas;
-import com.mygame.tactics.characters.Tyler;
-import com.mygame.tactics.characters.Weirdguard;
+import com.mygame.tactics.CharacterRoster;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.utils.Array;
@@ -111,32 +88,10 @@ public class KryoRegistrar {
         kryo.register(Timeline.EventType.class);
         kryo.register(Ability.class);
 
-        // --- Character base and all subclasses ---
+        // --- Character base and all subclasses (sourced from CharacterRoster) ---
         kryo.register(Character.class);
-        kryo.register(Aevan.class);
-        kryo.register(Aaron.class);
-        kryo.register(Anna.class);
-        kryo.register(Ben.class);
-        kryo.register(Billy.class);
-        kryo.register(Brad.class);
-        kryo.register(Emily.class);
-        kryo.register(Evan.class);
-        kryo.register(Ghia.class);
-        kryo.register(GuardTower.class);
-        kryo.register(Hunter.class);
-        kryo.register(Jaxon.class);
-        kryo.register(Lark.class);
-        kryo.register(Luke.class);
-        kryo.register(Mason.class);
-        kryo.register(Maxx.class);
-        kryo.register(Nathan.class);
-        kryo.register(Sean.class);
-        kryo.register(Snowguard.class);
-        kryo.register(Speen.class);
-        kryo.register(Stoneguard.class);
-        kryo.register(Thomas.class);
-        kryo.register(Tyler.class);
-        kryo.register(Weirdguard.class);
+        for (Class<?> c : CharacterRoster.CLASSES)
+            kryo.register(c);
 
         // --- Enums ---
         kryo.register(Enums.Alliance.class);

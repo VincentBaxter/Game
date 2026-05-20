@@ -512,8 +512,8 @@ public class GameEngine {
             return;
         }
 
-        // --- Tumble (Emily — push Haven away) ---
-        if (abilityName.equals("Tumble")) {
+        // --- Stairfall (Emily — push Haven away) ---
+        if (abilityName.equals("Stairfall")) {
             state.selectedAbility.execute(state.activeUnit, null, state, events,
                     state.activeUnit.x, state.activeUnit.y);
             pushHaven(state, events);
@@ -1204,21 +1204,29 @@ public class GameEngine {
 	     int[][] directions = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
 	     int[] dir = directions[new Random().nextInt(4)];
 	     int dx = dir[0], dy = dir[1];
-	
+
 	     String dirName = (dx == 1) ? "EAST" : (dx == -1) ? "WEST"
 	                    : (dy == 1) ? "NORTH" : "SOUTH";
 	     events.add(new EngineEvent.PopupEvent("WIND PUSHES " + dirName + "!",
 	             0, "VOID", state.haven.getX(), state.haven.getY()));
-	
+
 	     int dist = state.windPushDistance;
-	
+
 	     // Collect all living units — snapshot so mid-push kills don't
 	     // affect the iteration order
 	     Array<Character> toProcess = new Array<>();
 	     for (Character c : state.allUnits) {
 	         if (!c.isDead()) toProcess.add(c);
 	     }
-	
+
+	     // Capture pre-push tile positions for the animation event
+	     int[] preX = new int[toProcess.size];
+	     int[] preY = new int[toProcess.size];
+	     for (int i = 0; i < toProcess.size; i++) {
+	         preX[i] = toProcess.get(i).x;
+	         preY[i] = toProcess.get(i).y;
+	     }
+
 	     // Sort so units furthest in the push direction are moved first,
 	     // preventing units from blocking each other mid-push
 	     toProcess.sort((a, b) -> {
@@ -1264,7 +1272,21 @@ public class GameEngine {
 	             }
 	         }
 	     }
-	
+
+	     // Emit wind sweep animation event — captures where each unit ended up
+	     {
+	         Character[] unitArr = new Character[toProcess.size];
+	         int[][] moveArr = new int[toProcess.size][4];
+	         for (int i = 0; i < toProcess.size; i++) {
+	             unitArr[i] = toProcess.get(i);
+	             moveArr[i][0] = preX[i];
+	             moveArr[i][1] = preY[i];
+	             moveArr[i][2] = toProcess.get(i).x;
+	             moveArr[i][3] = toProcess.get(i).y;
+	         }
+	         events.insert(0, new EngineEvent.WindSweepEvent(dx, dy, dist, unitArr, moveArr));
+	     }
+
 	     // Grow push distance for next event
 	     state.windPushDistance++;
 	     state.collapseCount++; // keeps Haven bonus escalating same as other boards
@@ -1295,54 +1317,73 @@ public class GameEngine {
 
 	private void triggerDesertCollapse(GameState state, Array<EngineEvent> events) {
 	    if (state.haven == null) return;
-
 	    int hx = state.haven.getX();
 	    int hy = state.haven.getY();
 
-	    // Find the non-collapsed, non-Haven tile furthest from the Haven
-	    // by Manhattan distance. Break ties by picking the highest x then y.
-	    int bestX = -1, bestY = -1, bestDist = -1;
+	    // Find the maximum Chebyshev ring distance among live, non-Haven tiles.
+	    int maxRing = 0;
 	    for (int x = 0; x < state.board.getRows(); x++) {
 	        for (int y = 0; y < state.board.getCols(); y++) {
 	            if (state.board.isCollapsedAt(x, y)) continue;
-	            if (x == hx && y == hy) continue; // Haven always protected
-	            int dist = Math.abs(x - hx) + Math.abs(y - hy);
-	            if (dist > bestDist
-	                    || (dist == bestDist && (x > bestX
-	                    || (x == bestX && y > bestY)))) {
-	                bestDist = dist;
-	                bestX = x;
-	                bestY = y;
+	            if (x == hx && y == hy) continue;
+	            maxRing = Math.max(maxRing, Math.max(Math.abs(x - hx), Math.abs(y - hy)));
+	        }
+	    }
+
+	    // Stop once only Haven remains.
+	    if (maxRing == 0) return;
+
+	    // Batch size schedule based on how many turns have elapsed.
+	    // Turns 1-5: 4 tiles, 6-9: 3 tiles, 10-12: 2 tiles, 13+: 1 tile.
+	    int t = state.desertTurnCount;
+	    int tilesToDrop = t < 5 ? 4 : t < 9 ? 3 : t < 12 ? 2 : 1;
+	    state.desertTurnCount++;
+
+	    // Collect all live tiles in the outermost ring, then sort by squared
+	    // Euclidean distance from haven descending so true corners go first.
+	    Array<int[]> ring = new Array<>();
+	    for (int x = 0; x < state.board.getRows(); x++) {
+	        for (int y = 0; y < state.board.getCols(); y++) {
+	            if (state.board.isCollapsedAt(x, y)) continue;
+	            if (x == hx && y == hy) continue;
+	            if (Math.max(Math.abs(x - hx), Math.abs(y - hy)) == maxRing) {
+	                ring.add(new int[]{x, y});
 	            }
 	        }
 	    }
 
-	    if (bestX == -1) return; // No tile to collapse — only Haven remains
+	    ring.sort((a, b) -> {
+	        int da = (a[0] - hx) * (a[0] - hx) + (a[1] - hy) * (a[1] - hy);
+	        int db = (b[0] - hx) * (b[0] - hx) + (b[1] - hy) * (b[1] - hy);
+	        return db - da; // descending — farthest first
+	    });
 
-	    // Collapse the tile
-	    state.board.getTile(bestX, bestY).setCollapsed(true);
-	    events.add(new EngineEvent.TileEffectEvent(
-	            EngineEvent.TileEffectEvent.Effect.COLLAPSE, bestX, bestY));
-	    events.add(new EngineEvent.PopupEvent("SANDS SHIFT!", 0, "VOID", bestX, bestY));
+	    int n = Math.min(tilesToDrop, ring.size);
+	    for (int i = 0; i < n; i++) {
+	        int cx = ring.get(i)[0];
+	        int cy = ring.get(i)[1];
 
-	    // Kill any character standing on the collapsed tile
-	    Character victim = state.board.getCharacterAt(bestX, bestY);
-	    if (victim != null && !victim.isDead()) {
-	        events.add(new EngineEvent.PopupEvent("INTO THE VOID", 0, "VOID", bestX, bestY));
-	        victim.setHealth(0);
-	        handleDeath(victim, state, events);
-	        if (state.isGameOver()) return;
-	    }
+	        state.board.getTile(cx, cy).setCollapsed(true);
+	        events.add(new EngineEvent.TileEffectEvent(EngineEvent.TileEffectEvent.Effect.COLLAPSE, cx, cy));
+	        events.add(new EngineEvent.PopupEvent("SANDS SHIFT!", 0, "VOID", cx, cy));
 
-	    // Increment collapseCount so Haven bonus escalates same as other boards
-	    state.collapseCount++;
-	    if (state.havenOccupant != null && !state.havenOccupant.isDead()) {
-	        state.havenOccupant.atk++;
-	        state.havenOccupant.mag++;
-	        state.havenOccupant.armor++;
-	        state.havenOccupant.cloak++;
-	        events.add(new EngineEvent.PopupEvent("HAVEN +" + state.collapseCount,
-	                0, "BUFF", hx, hy));
+	        Character victim = state.board.getCharacterAt(cx, cy);
+	        if (victim != null && !victim.isDead()) {
+	            events.add(new EngineEvent.PopupEvent("INTO THE VOID", 0, "VOID", cx, cy));
+	            victim.setHealth(0);
+	            handleDeath(victim, state, events);
+	            if (state.isGameOver()) return;
+	        }
+
+	        state.collapseCount++;
+	        if (state.havenOccupant != null && !state.havenOccupant.isDead()) {
+	            state.havenOccupant.atk++;
+	            state.havenOccupant.mag++;
+	            state.havenOccupant.armor++;
+	            state.havenOccupant.cloak++;
+	            events.add(new EngineEvent.PopupEvent("HAVEN +" + state.collapseCount,
+	                    0, "BUFF", hx, hy));
+	        }
 	    }
 	}
 

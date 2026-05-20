@@ -121,7 +121,7 @@ public class MenuScreen implements Screen {
     // -----------------------------------------------------------------------
     // Screen lifecycle
     // -----------------------------------------------------------------------
-    @Override public void show()   { checkForUpdate(); }
+    @Override public void show()   { checkForUpdate(); Main.startMenuMusic(); }
     @Override public void resize(int w, int h) { viewport.update(w, h); }
     @Override public void pause()  {}
     @Override public void resume() {}
@@ -178,8 +178,10 @@ public class MenuScreen implements Screen {
         }
 
         if (btnSinglePlayer.contains(world.x, world.y)) {
+            Main.stopMenuMusic();
             game.setScreen(new DraftScreen(game));
         } else if (btnMapEditor.contains(world.x, world.y)) {
+            Main.stopMenuMusic();
             game.setScreen(new MapEditorScreen(game));
         } else if (btnWorld.contains(world.x, world.y)) {
             FileDialog fd = new FileDialog((Frame) null, "Open World Area", FileDialog.LOAD);
@@ -188,29 +190,16 @@ public class MenuScreen implements Screen {
             if (fd.getFile() != null) {
                 try {
                     WorldArea area = WorldArea.load(Gdx.files.absolute(fd.getDirectory() + fd.getFile()));
+                    Main.stopMenuMusic();
                     game.setScreen(new WorldScreen(game, area));
                 } catch (Exception ignored) {}
             }
         } else if (btnOnline.contains(world.x, world.y)) {
-            // Route to tutorial if it hasn't been completed yet
-            if (!Main.flags.is("area_tutorial_complete")) {
-                String[] dirs = {".", "assets", "../assets", "../../assets"};
-                for (String d : dirs) {
-                    FileHandle f = Gdx.files.local(d + "/area_tutorial.txt");
-                    if (f.exists()) {
-                        try {
-                            WorldArea tutorial = WorldArea.load(f);
-                            tutorial.applyOverrides(Main.flags);
-                            game.setScreen(new WorldScreen(game, tutorial));
-                            return;
-                        } catch (Exception ignored) {}
-                    }
-                }
-            }
-            // Tutorial complete (or file not found) — proceed to character creation
+            Main.stopMenuMusic();
             game.setScreen(new CharacterCreationScreen(game));
+        } else if (btnSettings.contains(world.x, world.y)) {
+            game.setScreen(new SettingsScreen(game)); // no stopMenuMusic — music continues
         }
-        // Settings: TODO
     }
 
     // -----------------------------------------------------------------------
@@ -241,10 +230,10 @@ public class MenuScreen implements Screen {
     // -----------------------------------------------------------------------
     private void drawButton(SpriteBatch b, Rectangle r, String label, int idx) {
         boolean hovered = (hoveredBtn == idx);
-        boolean dimmed  = (idx == 4);
+        boolean dimmed  = false;
         float   aw      = 6f;
-        Color   ac      = dimmed ? BLUE : GOLD;
-        float   acA     = dimmed ? 0.30f : (hovered ? 1.0f : 0.72f);
+        Color   ac      = GOLD;
+        float   acA     = hovered ? 1.0f : 0.72f;
 
         // Outer glow / hairline border
         if (hovered && !dimmed) {

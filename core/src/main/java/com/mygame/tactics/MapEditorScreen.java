@@ -20,8 +20,11 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import java.awt.FileDialog;
 import java.awt.Frame;
+import java.util.ArrayDeque;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
 import javax.swing.JOptionPane;
 
 /**
@@ -49,7 +52,9 @@ import javax.swing.JOptionPane;
 public class MapEditorScreen implements Screen, InputProcessor {
 
     // ---- Layout ----
-    private static final float TILE_SZ   = 48f;
+    private float tileSize = 48f;
+    private static final float TILE_SZ_MIN = 4f;
+    private static final float TILE_SZ_MAX = 96f;
     private static final float PALETTE_W = 200f;
     private static final float PROPS_W   = 200f;
     private static final float TOP_H     = 40f;
@@ -144,13 +149,24 @@ public class MapEditorScreen implements Screen, InputProcessor {
     private String    npcBrushChar = ALL_CHARS[0]; // selected character for NPC placement
     private boolean   paintWalkValue  = true;  // target value when dragging with BRUSH_WALK
     private boolean   paintInterValue = true;  // target value when dragging with BRUSH_INTER
+    private enum DrawMode { NONE, FILL, RECT, CIRCLE }
+    private DrawMode  drawMode        = DrawMode.NONE;
     private String    pendingFillTerrain = null; // terrain name awaiting confirm-click
+    // Anchor tile for two-click shape tools (RECT, CIRCLE); -1 when not set
+    private int       shapeAnchorX    = -1, shapeAnchorY = -1;
     private float     camX = 0f, camY = 0f;
     private float     palScrollY = 0f;
 
     // Middle-mouse drag
     private boolean midDragging = false;
     private float   midDragWX, midDragWY, midDragCamX, midDragCamY;
+
+    // Undo stack — snapshots of WorldArea (tiles, npcs, overrides, spawn)
+    private final java.util.Deque<WorldArea> undoStack = new java.util.ArrayDeque<>();
+    private static final int MAX_UNDO = 20;
+    // Track whether undo was already pushed for the current mouse drag
+    private boolean leftDragUndoPushed  = false;
+    private boolean rightDragUndoPushed = false;
 
     // Hover and selected map tile
     private int hovX = -1, hovY = -1;
@@ -185,6 +201,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
 
     // Mode toggle buttons (top bar) — DIALOGUE added alongside WORLD/COMBAT
     private final Rectangle btnModeDialogue = new Rectangle(568, BTN_BY, 114, BTN_BH);
+    private final Rectangle btnUndo         = new Rectangle(690, BTN_BY, 76,  BTN_BH);
 
     // ---- Constructor ----
 
@@ -210,28 +227,27 @@ public class MapEditorScreen implements Screen, InputProcessor {
         bgTileIds.clear();
         objTileIds.clear();
 
-        // Try several candidate directories to support both Gradle run (workingDir=assets/)
-        // and Eclipse launch (workingDir = project root or module root).
-        String[] candidates = {".", "assets", "../assets", "../../assets"};
-        for (String cand : candidates) {
+        // Load IDs from tile_manifest.txt — works in both Eclipse and JAR.
+        String[] ids = readManifest();
+        for (String id : ids) {
+            if (id.isEmpty()) continue;
             try {
-                FileHandle dir = Gdx.files.local(cand);
-                if (!dir.exists() || !dir.isDirectory()) continue;
-                for (FileHandle f : dir.list(".png")) {
-                    String id = f.nameWithoutExtension();
-                    if (!id.startsWith("tile_") && !id.startsWith("map_") && !id.startsWith("building_")) continue;
-                    if (tileTextures.containsKey(id)) continue; // already loaded
-                    try {
-                        Texture tex = new Texture(f); // load from exact path, not classpath
-                        tileTextures.put(id, tex);
-                        if (id.startsWith("tile_"))                                    bgTileIds.add(id);
-                        else if (id.startsWith("map_") || id.startsWith("building_")) objTileIds.add(id);
-                    } catch (Exception ignored) {}
-                }
-                if (!tileTextures.isEmpty()) break; // found tiles, stop searching
+                Texture tex = new Texture(Gdx.files.internal(id + ".png"));
+                tileTextures.put(id, tex);
+                if (id.startsWith("tile_"))                                    bgTileIds.add(id);
+                else if (id.startsWith("map_") || id.startsWith("building_")) objTileIds.add(id);
             } catch (Exception ignored) {}
         }
         buildTerrainPairs();
+    }
+
+    /** Reads tile_manifest.txt from classpath (JAR) or local disk (Eclipse). */
+    private static String[] readManifest() {
+        try {
+            FileHandle f = Gdx.files.internal("tile_manifest.txt");
+            if (f.exists()) return f.readString().split("\\r?\\n");
+        } catch (Exception ignored) {}
+        return new String[0];
     }
 
     private void buildTerrainPairs() {
@@ -260,7 +276,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
 
     /** Height of the TILE PROPS (walkable/interactable paint) section. */
     private static float propsSectionHeight() {
-        return SEC_HDR_H + PAL_GAP + ERASE_H + PAL_GAP + ERASE_H + PAL_GAP + ERASE_H + 8f;
+        return SEC_HDR_H + PAL_GAP + ERASE_H + PAL_GAP + ERASE_H + PAL_GAP + ERASE_H + PAL_GAP + ERASE_H + PAL_GAP + ERASE_H + PAL_GAP + ERASE_H + 8f;
     }
 
     private float terrainSectionHeight() {
@@ -275,6 +291,40 @@ public class MapEditorScreen implements Screen, InputProcessor {
         for (int x = 0; x < area.width; x++)
             for (int y = 0; y < area.height; y++)
                 area.tiles[x][y].backgroundId = ((x + y) % 2 == 0) ? pair[0] : pair[1];
+    }
+
+    private WorldArea deepCopyArea(WorldArea src) {
+        WorldArea copy = new WorldArea(src.areaId, src.width, src.height);
+        copy.spawnX = src.spawnX;
+        copy.spawnY = src.spawnY;
+        copy.sourceFile = src.sourceFile;
+        for (int x = 0; x < src.width; x++)
+            for (int y = 0; y < src.height; y++)
+                copy.tiles[x][y] = src.tiles[x][y].copy();
+        for (WorldArea.FlagOverride ov : src.overrides) {
+            WorldArea.FlagOverride c = new WorldArea.FlagOverride();
+            c.flagKey = ov.flagKey; c.op = ov.op; c.threshold = ov.threshold;
+            c.x = ov.x; c.y = ov.y; c.layer = ov.layer; c.tileId = ov.tileId;
+            copy.overrides.add(c);
+        }
+        for (WorldArea.WorldNpc npc : src.npcs) {
+            WorldArea.WorldNpc n = new WorldArea.WorldNpc();
+            n.charName = npc.charName; n.x = npc.x; n.y = npc.y;
+            n.interactable = npc.interactable; n.triggerAreaId = npc.triggerAreaId;
+            n.combatFile = npc.combatFile; n.winFlag = npc.winFlag;
+            copy.npcs.add(n);
+        }
+        return copy;
+    }
+
+    private void pushUndo() {
+        undoStack.push(deepCopyArea(area));
+        if (undoStack.size() > MAX_UNDO) undoStack.pollLast();
+    }
+
+    private void doUndo() {
+        if (undoStack.isEmpty()) return;
+        area = undoStack.pop();
     }
 
     private WorldArea resizeArea(WorldArea old, int newW, int newH) {
@@ -297,8 +347,10 @@ public class MapEditorScreen implements Screen, InputProcessor {
 
     @Override
     public void render(float delta) {
-        // WASD / arrow key pan
-        float spd = 300f * delta;
+        // WASD / arrow key pan  (hold Shift for 5x speed)
+        boolean shifting = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)
+                        || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
+        float spd = 300f * delta * (shifting ? 5f : 1f);
         if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT))  camX -= spd;
         if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) camX += spd;
         if (Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN))  camY -= spd;
@@ -314,12 +366,18 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 int tx = toTileX(mp.x), ty = toTileY(mp.y);
                 if (inBounds(tx, ty)) { hovX = tx; hovY = ty; }
             }
-            // Held left-click: paint
-            if (!midDragging && Gdx.input.isButtonPressed(Input.Buttons.LEFT) && hovX >= 0)
+            // Held left-click: paint (suppressed in fill mode — fill fires on touchDown only)
+            if (drawMode == DrawMode.NONE && !midDragging && Gdx.input.isButtonPressed(Input.Buttons.LEFT) && hovX >= 0) {
+                if (!leftDragUndoPushed) { pushUndo(); leftDragUndoPushed = true; }
                 paintAt(hovX, hovY);
+            }
+            if (!Gdx.input.isButtonPressed(Input.Buttons.LEFT)) leftDragUndoPushed = false;
             // Held right-click: erase
-            if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT) && hovX >= 0)
+            if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT) && hovX >= 0) {
+                if (!rightDragUndoPushed) { pushUndo(); rightDragUndoPushed = true; }
                 eraseAt(hovX, hovY);
+            }
+            if (!Gdx.input.isButtonPressed(Input.Buttons.RIGHT)) rightDragUndoPushed = false;
         } else if (editorMode == EditorMode.COMBAT) {
             // Update combat grid hover
             combatHovX = combatHovY = -1;
@@ -433,31 +491,108 @@ public class MapEditorScreen implements Screen, InputProcessor {
         }
     }
 
+    /** Flood-fill from (startX, startY), replacing all contiguous tiles that share
+     *  the same backgroundId (or terrain family) with the current brush. */
+    private void floodFill(int startX, int startY) {
+        if (brush == null || !brush.startsWith("tile_")) return;
+        String target = area.tiles[startX][startY].backgroundId;
+        if (Objects.equals(target, brush)) return; // already this tile
+
+        // Collect tile IDs that the flood fill should treat as equivalent to the target.
+        // Only expand to the full terrain family (e.g. grass1+grass2) when the brush is from
+        // a DIFFERENT family — this lets you replace an alternating-tile area in one stroke.
+        // If the brush is in the SAME family as the target (e.g. filling swamp1 with swamp2),
+        // do NOT expand — the user wants to paint only the exact-match tiles.
+        java.util.Set<String> targetFamily = new java.util.HashSet<>();
+        targetFamily.add(target);
+        if (target != null) {
+            for (String[] pair : terrainPairs.values()) {
+                boolean targetInPair = false, brushInPair = false;
+                for (String id : pair) {
+                    if (id.equals(target)) targetInPair = true;
+                    if (id.equals(brush))  brushInPair  = true;
+                }
+                if (targetInPair) {
+                    if (!brushInPair) for (String id : pair) targetFamily.add(id);
+                    break;
+                }
+            }
+        }
+
+        Queue<int[]> queue = new ArrayDeque<>();
+        queue.add(new int[]{startX, startY});
+        boolean[][] visited = new boolean[area.width][area.height];
+        visited[startX][startY] = true;
+        while (!queue.isEmpty()) {
+            int[] pos = queue.poll();
+            int x = pos[0], y = pos[1];
+            area.tiles[x][y].backgroundId = brush;
+            int[][] nbrs = {{x+1,y},{x-1,y},{x,y+1},{x,y-1}};
+            for (int[] n : nbrs) {
+                int nx = n[0], ny = n[1];
+                if (nx >= 0 && nx < area.width && ny >= 0 && ny < area.height
+                        && !visited[nx][ny]
+                        && targetFamily.contains(area.tiles[nx][ny].backgroundId)) {
+                    visited[nx][ny] = true;
+                    queue.add(new int[]{nx, ny});
+                }
+            }
+        }
+    }
+
+    /** Returns all in-bounds tile coords that the current shape tool would fill,
+     *  given anchor (ax,ay) and endpoint (bx,by). */
+    private java.util.List<int[]> getShapeTiles(int ax, int ay, int bx, int by) {
+        java.util.List<int[]> list = new java.util.ArrayList<>();
+        if (drawMode == DrawMode.RECT) {
+            int x0 = Math.min(ax, bx), x1 = Math.max(ax, bx);
+            int y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    if (inBounds(x, y)) list.add(new int[]{x, y});
+        } else if (drawMode == DrawMode.CIRCLE) {
+            double r = Math.sqrt((double)(bx - ax) * (bx - ax) + (double)(by - ay) * (by - ay));
+            int ri = (int) Math.ceil(r);
+            for (int x = ax - ri; x <= ax + ri; x++)
+                for (int y = ay - ri; y <= ay + ri; y++)
+                    if (inBounds(x, y)
+                            && Math.sqrt((double)(x - ax) * (x - ax) + (double)(y - ay) * (y - ay)) <= r + 0.5)
+                        list.add(new int[]{x, y});
+        }
+        return list;
+    }
+
+    private void fillShape(int ax, int ay, int bx, int by) {
+        if (brush == null) return;
+        for (int[] t : getShapeTiles(ax, ay, bx, by))
+            paintAt(t[0], t[1]);
+    }
+
     // ---- Draw: Map ----
 
     private void drawMap(SpriteBatch b) {
         b.setColor(0.08f, 0.08f, 0.08f, 1f);
         b.draw(whitePixel, MAP_X, MAP_Y, MAP_W, MAP_H);
 
-        int x0 = Math.max(0, (int)(camX / TILE_SZ));
-        int y0 = Math.max(0, (int)(camY / TILE_SZ));
-        int x1 = Math.min(area.width,  x0 + (int)(MAP_W / TILE_SZ) + 2);
-        int y1 = Math.min(area.height, y0 + (int)(MAP_H / TILE_SZ) + 2);
+        int x0 = Math.max(0, (int)(camX / tileSize));
+        int y0 = Math.max(0, (int)(camY / tileSize));
+        int x1 = Math.min(area.width,  x0 + (int)(MAP_W / tileSize) + 2);
+        int y1 = Math.min(area.height, y0 + (int)(MAP_H / tileSize) + 2);
 
         // ---- Pass 1: checkerboard + background tile textures ----
         for (int tx = x0; tx < x1; tx++) {
             for (int ty = y0; ty < y1; ty++) {
-                float dx = MAP_X + tx * TILE_SZ - camX;
-                float dy = MAP_Y + ty * TILE_SZ - camY;
+                float dx = MAP_X + tx * tileSize - camX;
+                float dy = MAP_Y + ty * tileSize - camY;
                 boolean even = (tx + ty) % 2 == 0;
                 b.setColor(even ? 0.14f : 0.18f, even ? 0.14f : 0.18f, even ? 0.18f : 0.22f, 1f);
-                b.draw(whitePixel, dx, dy, TILE_SZ, TILE_SZ);
+                b.draw(whitePixel, dx, dy, tileSize, tileSize);
                 WorldTile tile = area.tiles[tx][ty];
                 if (tile.backgroundId != null) {
                     Texture bg = tileTextures.get(tile.backgroundId);
                     if (bg != null) {
                         b.setColor(Color.WHITE);
-                        b.draw(bg, dx, dy, TILE_SZ, TILE_SZ);
+                        b.draw(bg, dx, dy, tileSize, tileSize);
                     }
                 }
             }
@@ -472,11 +607,11 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 WorldTile tile = area.tiles[tx][ty];
                 if (tile.objectId == null) continue;
                 Texture obj = tileTextures.get(tile.objectId);
-                float adx = MAP_X + tx * TILE_SZ - camX;
-                float ady = MAP_Y + ty * TILE_SZ - camY;
+                float adx = MAP_X + tx * tileSize - camX;
+                float ady = MAP_Y + ty * tileSize - camY;
                 if (obj == null) {
                     b.setColor(0.8f, 0f, 0.8f, 0.5f);
-                    b.draw(whitePixel, adx, ady, TILE_SZ, TILE_SZ);
+                    b.draw(whitePixel, adx, ady, tileSize, tileSize);
                     continue;
                 }
                 // Scan DOWN first to find the anchor row, then LEFT to find the anchor column.
@@ -490,37 +625,38 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 int srcX = (tx - ax) * 64;
                 int srcY = (tileH - 1 - (ty - ay)) * 64;
                 b.setColor(Color.WHITE);
-                b.draw(obj, adx, ady, TILE_SZ, TILE_SZ, srcX, srcY, 64, 64, false, false);
+                b.draw(obj, adx, ady, tileSize, tileSize, srcX, srcY, 64, 64, false, false);
             }
         }
 
         // ---- Pass 3: overlays, grid lines, hover, selection ----
         for (int tx = x0; tx < x1; tx++) {
             for (int ty = y0; ty < y1; ty++) {
-                float dx = MAP_X + tx * TILE_SZ - camX;
-                float dy = MAP_Y + ty * TILE_SZ - camY;
+                float dx = MAP_X + tx * tileSize - camX;
+                float dy = MAP_Y + ty * tileSize - camY;
                 WorldTile tile = area.tiles[tx][ty];
 
                 // Blocked overlay (red tint)
                 if (!tile.walkable) {
                     b.setColor(0.9f, 0.1f, 0.1f, 0.20f);
-                    b.draw(whitePixel, dx, dy, TILE_SZ, TILE_SZ);
+                    b.draw(whitePixel, dx, dy, tileSize, tileSize);
                 }
-                // Interactable dot — yellow, top-right
-                if (tile.interactable) {
-                    b.setColor(1f, 0.9f, 0f, 1f);
-                    b.draw(whitePixel, dx + TILE_SZ - 10f, dy + TILE_SZ - 10f, 8f, 8f);
+                if (tileSize >= 10f) {
+                    // Interactable dot — yellow, top-right
+                    if (tile.interactable) {
+                        b.setColor(1f, 0.9f, 0f, 1f);
+                        b.draw(whitePixel, dx + tileSize - 10f, dy + tileSize - 10f, 8f, 8f);
+                    }
+                    // Trigger dot — cyan, top-left
+                    if (tile.triggerAreaId != null) {
+                        b.setColor(0f, 0.9f, 1f, 1f);
+                        b.draw(whitePixel, dx + 2f, dy + tileSize - 10f, 8f, 8f);
+                    }
+                    // Grid lines (right and top edges)
+                    b.setColor(0.28f, 0.28f, 0.32f, 1f);
+                    b.draw(whitePixel, dx + tileSize - 1, dy,               1,       tileSize);
+                    b.draw(whitePixel, dx,               dy + tileSize - 1, tileSize, 1);
                 }
-                // Trigger dot — cyan, top-left
-                if (tile.triggerAreaId != null) {
-                    b.setColor(0f, 0.9f, 1f, 1f);
-                    b.draw(whitePixel, dx + 2f, dy + TILE_SZ - 10f, 8f, 8f);
-                }
-
-                // Grid lines (right and top edges)
-                b.setColor(0.28f, 0.28f, 0.32f, 1f);
-                b.draw(whitePixel, dx + TILE_SZ - 1, dy,               1,       TILE_SZ);
-                b.draw(whitePixel, dx,               dy + TILE_SZ - 1, TILE_SZ, 1);
 
                 // Hover: brush preview
                 if (tx == hovX && ty == hovY) {
@@ -529,72 +665,98 @@ public class MapEditorScreen implements Screen, InputProcessor {
                         if (bt != null) {
                             b.setColor(1f, 1f, 1f, 0.55f);
                             if (brush.startsWith("building_")) {
-                                b.draw(bt, dx, dy, buildingTilesW(brush) * TILE_SZ, buildingTilesH(brush) * TILE_SZ);
+                                b.draw(bt, dx, dy, buildingTilesW(brush) * tileSize, buildingTilesH(brush) * tileSize);
                             } else {
-                                b.draw(bt, dx, dy, TILE_SZ, TILE_SZ);
+                                b.draw(bt, dx, dy, tileSize, tileSize);
                             }
                         }
                     }
                     b.setColor(1f, 1f, 1f, 0.18f);
-                    b.draw(whitePixel, dx, dy, TILE_SZ, TILE_SZ);
+                    b.draw(whitePixel, dx, dy, tileSize, tileSize);
                 }
 
                 // Selection outline
                 if (tx == selX && ty == selY) {
                     b.setColor(Color.YELLOW);
-                    b.draw(whitePixel, dx,               dy,               TILE_SZ, 2);
-                    b.draw(whitePixel, dx,               dy + TILE_SZ - 2, TILE_SZ, 2);
-                    b.draw(whitePixel, dx,               dy,               2, TILE_SZ);
-                    b.draw(whitePixel, dx + TILE_SZ - 2, dy,               2, TILE_SZ);
+                    b.draw(whitePixel, dx,               dy,               tileSize, 2);
+                    b.draw(whitePixel, dx,               dy + tileSize - 2, tileSize, 2);
+                    b.draw(whitePixel, dx,               dy,               2, tileSize);
+                    b.draw(whitePixel, dx + tileSize - 2, dy,               2, tileSize);
                 }
             }
         }
 
         // Spawn point marker
         if (area.spawnX >= 0 && area.spawnY >= 0) {
-            float sx = MAP_X + area.spawnX * TILE_SZ - camX;
-            float sy = MAP_Y + area.spawnY * TILE_SZ - camY;
+            float sx = MAP_X + area.spawnX * tileSize - camX;
+            float sy = MAP_Y + area.spawnY * tileSize - camY;
             b.setColor(0.2f, 0.6f, 1f, 0.55f);
-            b.draw(whitePixel, sx, sy, TILE_SZ, TILE_SZ);
+            b.draw(whitePixel, sx, sy, tileSize, tileSize);
             b.setColor(0.2f, 0.6f, 1f, 1f);
-            b.draw(whitePixel, sx,               sy,               TILE_SZ, 2);
-            b.draw(whitePixel, sx,               sy + TILE_SZ - 2, TILE_SZ, 2);
-            b.draw(whitePixel, sx,               sy,               2, TILE_SZ);
-            b.draw(whitePixel, sx + TILE_SZ - 2, sy,               2, TILE_SZ);
+            b.draw(whitePixel, sx,               sy,               tileSize, 2);
+            b.draw(whitePixel, sx,               sy + tileSize - 2, tileSize, 2);
+            b.draw(whitePixel, sx,               sy,               2, tileSize);
+            b.draw(whitePixel, sx + tileSize - 2, sy,               2, tileSize);
             game.font.getData().setScale(0.55f);
             game.font.setColor(Color.WHITE);
-            game.font.draw(b, "S", sx + TILE_SZ / 2f - 4f, sy + TILE_SZ / 2f + 6f);
+            game.font.draw(b, "S", sx + tileSize / 2f - 4f, sy + tileSize / 2f + 6f);
         }
 
         // NPC markers
         for (WorldArea.WorldNpc npc : area.npcs) {
-            float nx = MAP_X + npc.x * TILE_SZ - camX;
-            float ny = MAP_Y + npc.y * TILE_SZ - camY;
+            float nx = MAP_X + npc.x * tileSize - camX;
+            float ny = MAP_Y + npc.y * tileSize - camY;
             // Purple tint overlay
             b.setColor(0.50f, 0.10f, 0.68f, 0.45f);
-            b.draw(whitePixel, nx, ny, TILE_SZ, TILE_SZ);
+            b.draw(whitePixel, nx, ny, tileSize, tileSize);
             // Purple border
             b.setColor(0.70f, 0.25f, 0.90f, 1f);
-            b.draw(whitePixel, nx,               ny,               TILE_SZ, 2);
-            b.draw(whitePixel, nx,               ny + TILE_SZ - 2, TILE_SZ, 2);
-            b.draw(whitePixel, nx,               ny,               2, TILE_SZ);
-            b.draw(whitePixel, nx + TILE_SZ - 2, ny,               2, TILE_SZ);
+            b.draw(whitePixel, nx,               ny,               tileSize, 2);
+            b.draw(whitePixel, nx,               ny + tileSize - 2, tileSize, 2);
+            b.draw(whitePixel, nx,               ny,               2, tileSize);
+            b.draw(whitePixel, nx + tileSize - 2, ny,               2, tileSize);
             // Character name (first 6 chars truncated to fit)
             game.font.getData().setScale(0.40f);
             game.font.setColor(Color.WHITE);
             String label = npc.charName.length() > 7 ? npc.charName.substring(0, 7) : npc.charName;
-            game.font.draw(b, label, nx + 3f, ny + TILE_SZ / 2f + 6f, TILE_SZ - 6f, -1, true);
+            game.font.draw(b, label, nx + 3f, ny + tileSize / 2f + 6f, tileSize - 6f, -1, true);
             // Yellow dot (top-right) for interactable
             if (npc.interactable) {
                 b.setColor(1f, 0.90f, 0f, 1f);
-                b.draw(whitePixel, nx + TILE_SZ - 10f, ny + TILE_SZ - 10f, 8f, 8f);
+                b.draw(whitePixel, nx + tileSize - 10f, ny + tileSize - 10f, 8f, 8f);
+            }
+        }
+
+        // Shape tool preview — highlight anchor + projected shape
+        if (shapeAnchorX >= 0) {
+            // Always show the anchor tile marker
+            float ax2 = MAP_X + shapeAnchorX * tileSize - camX;
+            float ay2 = MAP_Y + shapeAnchorY * tileSize - camY;
+            b.setColor(1f, 0.8f, 0f, 0.85f);
+            b.draw(whitePixel, ax2,                  ay2,                  tileSize, 2);
+            b.draw(whitePixel, ax2,                  ay2 + tileSize - 2,   tileSize, 2);
+            b.draw(whitePixel, ax2,                  ay2,                  2, tileSize);
+            b.draw(whitePixel, ax2 + tileSize - 2,   ay2,                  2, tileSize);
+            // Projected shape preview when cursor is on map
+            if (hovX >= 0) {
+                Texture bt = brush != null ? tileTextures.get(brush) : null;
+                for (int[] t : getShapeTiles(shapeAnchorX, shapeAnchorY, hovX, hovY)) {
+                    float px = MAP_X + t[0] * tileSize - camX;
+                    float py = MAP_Y + t[1] * tileSize - camY;
+                    if (bt != null) {
+                        b.setColor(1f, 1f, 1f, 0.40f);
+                        b.draw(bt, px, py, tileSize, tileSize);
+                    }
+                    b.setColor(1f, 0.8f, 0f, 0.25f);
+                    b.draw(whitePixel, px, py, tileSize, tileSize);
+                }
             }
         }
 
         // Map border
         b.setColor(0.35f, 0.35f, 0.45f, 1f);
         float bx = MAP_X - camX, by2 = MAP_Y - camY;
-        float bw = area.width * TILE_SZ, bh = area.height * TILE_SZ;
+        float bw = area.width * tileSize, bh = area.height * tileSize;
         b.draw(whitePixel, bx,      by2,      bw,  1);
         b.draw(whitePixel, bx,      by2 + bh, bw,  1);
         b.draw(whitePixel, bx,      by2,      1,   bh);
@@ -648,6 +810,12 @@ public class MapEditorScreen implements Screen, InputProcessor {
         drawPalEraseBtn(b, p, brush == BRUSH_INTER, "PAINT INTERACTABLE", new Color(0.55f, 0.50f, 0.05f, 1f));
         p += ERASE_H + PAL_GAP;
         drawPalEraseBtn(b, p, brush == BRUSH_SPAWN, "SET SPAWN POINT",    new Color(0.10f, 0.35f, 0.65f, 1f));
+        p += ERASE_H + PAL_GAP;
+        drawPalEraseBtn(b, p, drawMode == DrawMode.FILL,   "BUCKET FILL",  new Color(0.45f, 0.20f, 0.65f, 1f));
+        p += ERASE_H + PAL_GAP;
+        drawPalEraseBtn(b, p, drawMode == DrawMode.RECT,   "DRAW RECT",    new Color(0.15f, 0.45f, 0.70f, 1f));
+        p += ERASE_H + PAL_GAP;
+        drawPalEraseBtn(b, p, drawMode == DrawMode.CIRCLE, "DRAW CIRCLE",  new Color(0.65f, 0.30f, 0.10f, 1f));
         p += ERASE_H + 8f;
 
         // ---- TERRAIN FILL section ----
@@ -925,6 +1093,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
         drawSmallButton(b, btnSave, "SAVE");
         drawSmallButton(b, btnLoad, "LOAD");
         if (editorMode == EditorMode.WORLD) drawSmallButton(b, btnResize, "RESIZE");
+        if (editorMode == EditorMode.WORLD) drawSmallButton(b, btnUndo,   undoStack.isEmpty() ? "UNDO" : "UNDO (" + undoStack.size() + ")");
         drawSmallButton(b, btnBack, "BACK");
 
         // Mode toggle buttons
@@ -974,7 +1143,9 @@ public class MapEditorScreen implements Screen, InputProcessor {
         game.font.getData().setScale(0.44f);
         game.font.setColor(Color.LIGHT_GRAY);
         if (editorMode == EditorMode.WORLD) {
-            game.font.draw(b, area.areaId + "   (" + area.width + " x " + area.height + ")",
+            String coordLabel = hovX >= 0 ? "   cursor: (" + hovX + ", " + hovY + ")"
+                              : selX >= 0 ? "   selected: (" + selX + ", " + selY + ")" : "";
+            game.font.draw(b, area.areaId + "   (" + area.width + " x " + area.height + ")" + coordLabel,
                     700, BTN_BY + BTN_BH - 4f);
             game.font.getData().setScale(0.34f);
             game.font.setColor(new Color(0.4f, 0.4f, 0.5f, 1f));
@@ -1053,6 +1224,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 return true;
             }
             if (btnResize.contains(w.x, w.y) && editorMode == EditorMode.WORLD) { doResize(); return true; }
+            if (btnUndo  .contains(w.x, w.y) && editorMode == EditorMode.WORLD) { doUndo();   return true; }
             if (btnModeWorld   .contains(w.x, w.y)) { editorMode = EditorMode.WORLD;    return true; }
             if (btnModeCombat  .contains(w.x, w.y)) { editorMode = EditorMode.COMBAT;   return true; }
             if (btnModeDialogue.contains(w.x, w.y)) { editorMode = EditorMode.DIALOGUE; return true; }
@@ -1070,15 +1242,35 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 if (inMapArea(w.x, w.y)) {
                     int tx = toTileX(w.x), ty = toTileY(w.y);
                     if (inBounds(tx, ty)) {
-                        if (brush == BRUSH_WALK) {
+                        if (drawMode == DrawMode.FILL && brush != null && brush.startsWith("tile_")) {
+                            pushUndo();
+                            floodFill(tx, ty);
+                        } else if (drawMode == DrawMode.RECT || drawMode == DrawMode.CIRCLE) {
+                            if (shapeAnchorX < 0) {
+                                shapeAnchorX = tx; shapeAnchorY = ty; // first click: set anchor
+                            } else {
+                                pushUndo();
+                                fillShape(shapeAnchorX, shapeAnchorY, tx, ty);
+                                shapeAnchorX = -1;
+                            }
+                        } else if (brush == BRUSH_WALK) {
+                            pushUndo(); leftDragUndoPushed = true;
                             paintWalkValue = !area.tiles[tx][ty].walkable;
                             paintAt(tx, ty);
                         } else if (brush == BRUSH_INTER) {
+                            pushUndo(); leftDragUndoPushed = true;
                             paintInterValue = !area.tiles[tx][ty].interactable;
+                            paintAt(tx, ty);
+                        } else if (brush == BRUSH_SPAWN) {
+                            pushUndo(); leftDragUndoPushed = true;
+                            paintAt(tx, ty);
+                        } else if (brush == BRUSH_NPC) {
+                            pushUndo(); leftDragUndoPushed = true;
                             paintAt(tx, ty);
                         } else if (tx == selX && ty == selY) {
                             selX = selY = -1;
                         } else {
+                            pushUndo(); leftDragUndoPushed = true;
                             selX = tx; selY = ty; paintAt(tx, ty);
                         }
                     }
@@ -1122,6 +1314,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
             if (editorMode == EditorMode.WORLD && inMapArea(w.x, w.y)) {
                 int tx = toTileX(w.x), ty = toTileY(w.y);
                 if (inBounds(tx, ty)) {
+                    pushUndo(); rightDragUndoPushed = true;
                     if (brush == BRUSH_NPC) {
                         for (int i = area.npcs.size() - 1; i >= 0; i--) {
                             WorldArea.WorldNpc n = area.npcs.get(i);
@@ -1178,6 +1371,17 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 float maxScroll = Math.max(0, dlgPalContentHeight() - (MAP_H - PAL_HDR_H));
                 dlgPalScrollY = MathUtils.clamp(dlgPalScrollY, 0, maxScroll);
             }
+        } else if (inMapArea(w.x, w.y) && editorMode == EditorMode.WORLD) {
+            // Zoom toward the tile under the cursor
+            float oldSize = tileSize;
+            float factor  = amountY > 0 ? (1f / 1.25f) : 1.25f;
+            tileSize = MathUtils.clamp(tileSize * factor, TILE_SZ_MIN, TILE_SZ_MAX);
+            // Keep the tile under the mouse fixed in screen space
+            float tileX = (camX + w.x - MAP_X) / oldSize;
+            float tileY = (camY + w.y - MAP_Y) / oldSize;
+            camX = tileX * tileSize - (w.x - MAP_X);
+            camY = tileY * tileSize - (w.y - MAP_Y);
+            clampCamera();
         } else if (inMapArea(w.x, w.y) && editorMode == EditorMode.DIALOGUE) {
             dlgBeatScrollY += amountY * (DLG_ROW_H + 2f);
             float listH = MAP_H - PAL_HDR_H - (DLG_ADD_BTN_H + 8f);
@@ -1190,13 +1394,18 @@ public class MapEditorScreen implements Screen, InputProcessor {
     @Override
     public boolean keyDown(int keycode) {
         if (keycode == Input.Keys.ESCAPE) {
-            if (selX >= 0) { selX = selY = -1; return true; } // first Escape: deselect
-            game.setScreen(new MenuScreen(game)); return true;  // second Escape: back to menu
+            if (shapeAnchorX >= 0) { shapeAnchorX = -1; return true; } // cancel pending shape
+            if (selX >= 0) { selX = selY = -1; return true; } // deselect tile
+            game.setScreen(new MenuScreen(game)); return true;  // back to menu
         }
         if (keycode == Input.Keys.S && Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT)) {
             if (editorMode == EditorMode.WORLD) doSave();
             else if (editorMode == EditorMode.COMBAT) doSaveCombat();
             else saveDialogue();
+            return true;
+        }
+        if (keycode == Input.Keys.Z && Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT)) {
+            if (editorMode == EditorMode.WORLD) doUndo();
             return true;
         }
         return false;
@@ -1221,6 +1430,15 @@ public class MapEditorScreen implements Screen, InputProcessor {
         p += ERASE_H + PAL_GAP;
         float spawnBtnY = palY(p, ERASE_H);
         if (wy >= spawnBtnY && wy < spawnBtnY + ERASE_H) { brush = (brush == BRUSH_SPAWN ? null : BRUSH_SPAWN); return; }
+        p += ERASE_H + PAL_GAP;
+        float fillBtnY = palY(p, ERASE_H);
+        if (wy >= fillBtnY && wy < fillBtnY + ERASE_H) { drawMode = (drawMode == DrawMode.FILL ? DrawMode.NONE : DrawMode.FILL); shapeAnchorX = -1; return; }
+        p += ERASE_H + PAL_GAP;
+        float rectBtnY = palY(p, ERASE_H);
+        if (wy >= rectBtnY && wy < rectBtnY + ERASE_H) { drawMode = (drawMode == DrawMode.RECT ? DrawMode.NONE : DrawMode.RECT); shapeAnchorX = -1; return; }
+        p += ERASE_H + PAL_GAP;
+        float circleBtnY = palY(p, ERASE_H);
+        if (wy >= circleBtnY && wy < circleBtnY + ERASE_H) { drawMode = (drawMode == DrawMode.CIRCLE ? DrawMode.NONE : DrawMode.CIRCLE); shapeAnchorX = -1; return; }
         p += ERASE_H + 8f;
 
         // TERRAIN FILL section
@@ -1233,6 +1451,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 float by = palY(p + row * (TERRAIN_BTN_H + PAL_GAP), TERRAIN_BTN_H);
                 if (wx >= bx && wx < bx + TERRAIN_BTN_W && wy >= by && wy < by + TERRAIN_BTN_H) {
                     if (e.getKey().equals(pendingFillTerrain)) {
+                        pushUndo();
                         fillBackground(e.getKey());
                         pendingFillTerrain = null;
                     } else {
@@ -1324,8 +1543,8 @@ public class MapEditorScreen implements Screen, InputProcessor {
         if (dims == null) return;
         try {
             String[] p = dims.toLowerCase().split("x");
-            int w = MathUtils.clamp(Integer.parseInt(p[0].trim()), 5, 100);
-            int h = MathUtils.clamp(Integer.parseInt(p[1].trim()), 5, 100);
+            int w = MathUtils.clamp(Integer.parseInt(p[0].trim()), 5, 1000);
+            int h = MathUtils.clamp(Integer.parseInt(p[1].trim()), 5, 1000);
             area = new WorldArea(name.trim().replace(" ", "_"), w, h);
             camX = camY = 0; selX = selY = -1;
         } catch (Exception ignored) {}
@@ -1368,8 +1587,9 @@ public class MapEditorScreen implements Screen, InputProcessor {
         if (dims == null) return;
         try {
             String[] p = dims.toLowerCase().split("x");
-            int newW = MathUtils.clamp(Integer.parseInt(p[0].trim()), 5, 100);
-            int newH = MathUtils.clamp(Integer.parseInt(p[1].trim()), 5, 100);
+            int newW = MathUtils.clamp(Integer.parseInt(p[0].trim()), 5, 1000);
+            int newH = MathUtils.clamp(Integer.parseInt(p[1].trim()), 5, 1000);
+            pushUndo();
             area = resizeArea(area, newW, newH);
             clampCamera();
             selX = selY = -1;
@@ -1410,16 +1630,16 @@ public class MapEditorScreen implements Screen, InputProcessor {
         return wx >= MAP_X && wx < MAP_X + MAP_W && wy >= MAP_Y && wy < MAP_Y + MAP_H;
     }
 
-    private int toTileX(float wx) { return (int)((wx - MAP_X + camX) / TILE_SZ); }
-    private int toTileY(float wy) { return (int)((wy - MAP_Y + camY) / TILE_SZ); }
+    private int toTileX(float wx) { return (int)((wx - MAP_X + camX) / tileSize); }
+    private int toTileY(float wy) { return (int)((wy - MAP_Y + camY) / tileSize); }
 
     private boolean inBounds(int tx, int ty) {
         return tx >= 0 && tx < area.width && ty >= 0 && ty < area.height;
     }
 
     private void clampCamera() {
-        camX = MathUtils.clamp(camX, 0, Math.max(0, area.width  * TILE_SZ - MAP_W));
-        camY = MathUtils.clamp(camY, 0, Math.max(0, area.height * TILE_SZ - MAP_H));
+        camX = MathUtils.clamp(camX, 0, Math.max(0, area.width  * tileSize - MAP_W));
+        camY = MathUtils.clamp(camY, 0, Math.max(0, area.height * tileSize - MAP_H));
     }
 
     // ---- Combat mode: draw ----
@@ -1695,21 +1915,11 @@ public class MapEditorScreen implements Screen, InputProcessor {
     private void loadStorybgTextures() {
         storybgTextures.clear();
         storybgIds.clear();
-        String[] candidates = {".", "assets", "../assets", "../../assets"};
-        for (String cand : candidates) {
+        for (String id : readManifest()) {
+            if (!id.startsWith("storybg_")) continue;
             try {
-                FileHandle dir = Gdx.files.local(cand);
-                if (!dir.exists() || !dir.isDirectory()) continue;
-                for (FileHandle f : dir.list(".png")) {
-                    String name = f.nameWithoutExtension();
-                    if (!name.startsWith("storybg_")) continue;
-                    if (storybgTextures.containsKey(name)) continue;
-                    try {
-                        storybgTextures.put(name, new Texture(f));
-                        storybgIds.add(name);
-                    } catch (Exception ignored) {}
-                }
-                if (!storybgTextures.isEmpty()) break;
+                storybgTextures.put(id, new Texture(Gdx.files.internal(id + ".png")));
+                storybgIds.add(id);
             } catch (Exception ignored) {}
         }
     }

@@ -74,6 +74,7 @@ public class Hunter extends Character {
     public static class Vanish extends Ability {
         public Vanish() {
             super("Vanish", "Turn invisible, then move. Attacking makes you visible again.", 0, false);
+            this.grantsMovement = true;
         }
 
         @Override

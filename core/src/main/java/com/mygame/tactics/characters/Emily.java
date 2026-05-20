@@ -27,7 +27,7 @@ public class Emily extends Character {
         this.baseCritChance = 0.0;
         this.baseDodgeChance = 0.0;
         this.abilities[0] = new CouriersGrace();
-        this.abilities[1] = new Tumble();
+        this.abilities[1] = new Stairfall();
         this.abilities[2] = new Embrace();
         startBattle();
     }
@@ -57,13 +57,13 @@ public class Emily extends Character {
     }
 
     /**
-     * Tumble — pushes the Haven one tile directly away from Emily.
+     * Stairfall — pushes the Haven one tile directly away from Emily.
      * Haven movement is handled by GameEngine.executeAbility() via the
-     * named "Tumble" special case, mirroring Speen's Pass.
+     * named "Stairfall" special case, mirroring Speen's Pass.
      */
-    public static class Tumble extends Ability {
-        public Tumble() {
-            super("Tumble", "Push the Haven 1 tile directly away from you.", 0, false);
+    public static class Stairfall extends Ability {
+        public Stairfall() {
+            super("Stairfall", "Push the Haven 1 tile directly away from you.", 0, false);
         }
 
         @Override

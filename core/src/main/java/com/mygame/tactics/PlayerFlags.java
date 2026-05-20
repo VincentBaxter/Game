@@ -33,7 +33,8 @@ public class PlayerFlags {
     private static final String SAVE_PATH =
             SAVE_DIR + File.separator + "player.dat";
 
-    private final Map<String, Integer> data = new HashMap<>();
+    private final Map<String, Integer> data    = new HashMap<>();
+    private final Map<String, String>  strData = new HashMap<>();
 
     public PlayerFlags() {
         load();
@@ -85,6 +86,18 @@ public class PlayerFlags {
         set(key, get(key) + 1);
     }
 
+    /** Returns the string value of a flag, or the default if not set. */
+    public String getString(String key, String defaultValue) {
+        String v = strData.get(key);
+        return v != null ? v : defaultValue;
+    }
+
+    /** Sets a string flag and immediately persists to disk. */
+    public void setString(String key, String value) {
+        strData.put(key, value);
+        save();
+    }
+
     // -----------------------------------------------------------------------
     // Persistence
     // -----------------------------------------------------------------------
@@ -94,6 +107,9 @@ public class PlayerFlags {
             StringBuilder sb = new StringBuilder();
             for (Map.Entry<String, Integer> e : data.entrySet()) {
                 sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
+            }
+            for (Map.Entry<String, String> e : strData.entrySet()) {
+                sb.append('$').append(e.getKey()).append('=').append(e.getValue()).append('\n');
             }
             byte[] enc = encrypt(sb.toString().getBytes("UTF-8"));
             new File(SAVE_DIR).mkdirs();
@@ -116,14 +132,19 @@ public class PlayerFlags {
                 if (line.isEmpty()) continue;
                 int eq = line.indexOf('=');
                 if (eq < 0) continue;
-                try {
-                    data.put(line.substring(0, eq),
-                             Integer.parseInt(line.substring(eq + 1).trim()));
-                } catch (NumberFormatException ignored) {}
+                String key   = line.substring(0, eq);
+                String value = line.substring(eq + 1).trim();
+                if (key.startsWith("$")) {
+                    strData.put(key.substring(1), value);
+                } else {
+                    try { data.put(key, Integer.parseInt(value)); }
+                    catch (NumberFormatException ignored) {}
+                }
             }
         } catch (Exception e) {
             Gdx.app.error("PlayerFlags", "Load failed — starting fresh: " + e.getMessage());
             data.clear();
+            strData.clear();
         }
     }
 

@@ -59,6 +59,7 @@ public class GameState {
     public float  warningAlpha        = 0f; // visual fade; kept here so logic + rendering share one value
     public int windPushDistance = 1;
     public boolean havenLocked = false; // true once Ben's Lockdown fires
+    public int desertTurnCount = 0;    // how many times desert collapse has fired
 
     // Columns and rows that will collapse on the next ring trigger.
     // Populated by GameEngine.triggerRingCollapse() so CombatScreen can
