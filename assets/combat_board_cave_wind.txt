@@ -1,0 +1,2 @@
+COMBAT_BOARD
+boardType=WIND

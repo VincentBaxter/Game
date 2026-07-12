@@ -141,6 +141,7 @@ public class GameEngine {
      */
     public Array<EngineEvent> initialize(GameState state) {
         Array<EngineEvent> events = new Array<>();
+        state.timeline.projectFutureEvents(state.allUnits);
         if (state.isPreGame() && state.setupQueue.size > 0) {
             state.activeUnit = state.setupQueue.removeIndex(0);
             calculateMovementRange(state);
@@ -709,6 +710,13 @@ public class GameEngine {
             if (state.activeUnit instanceof Mason) {
                 ((Mason) state.activeUnit).isTakeFlightActive = false;
             }
+            // Mage passive: +3 MAG at end of each turn
+            if (state.activeUnit.getCharClass() == Enums.CharClass.MAGE) {
+                state.activeUnit.mag += 3;
+                events.add(new EngineEvent.PopupEvent("MAG +3", 0, "BUFF",
+                        state.activeUnit.x, state.activeUnit.y));
+            }
+
             // Poison escalation: if the unit ends their turn poisoned, +1 poison level
             if (state.activeUnit.poisonLevel > 0) {
                 state.activeUnit.poisonLevel++;
@@ -752,6 +760,18 @@ public class GameEngine {
                 }
             }
         }
+
+        // TANK passive: heal 3 HP after every character's turn
+        if (state.isBattle()) {
+            for (Character c : state.allUnits) {
+                if (!c.isDead() && c.charClass == Enums.CharClass.TANK && c.health < c.maxHealth) {
+                    int regen = Math.min(3, c.maxHealth - c.health);
+                    c.health += regen;
+                    events.add(new EngineEvent.PopupEvent("REGEN", regen, "HEAL", c.x, c.y));
+                }
+            }
+        }
+
         startTurn(state, events);
     }
 
@@ -851,6 +871,37 @@ public class GameEngine {
             }
         }
 
+        // --- Support aura (+5 ATK/MAG/ARM/CLK while adjacent to an ally SUPPORT) ---
+        for (Character c : state.allUnits) {
+            if (c.isDead()) {
+                if (c.supportAuraActive) {
+                    c.supportAuraActive = false;
+                    c.atk -= 5; c.mag -= 5; c.armor -= 5; c.cloak -= 5;
+                }
+                continue;
+            }
+            boolean inAura = false;
+            outer:
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    if (dx == 0 && dy == 0) continue;
+                    Character nb = state.board.getCharacterAt(c.x + dx, c.y + dy);
+                    if (nb != null && !nb.isDead() && nb.team == c.team
+                            && nb.getCharClass() == Enums.CharClass.SUPPORT) {
+                        inAura = true; break outer;
+                    }
+                }
+            }
+            if (inAura && !c.supportAuraActive) {
+                c.supportAuraActive = true;
+                c.atk += 5; c.mag += 5; c.armor += 5; c.cloak += 5;
+                events.add(new EngineEvent.PopupEvent("SUPPORT +5", 0, "BUFF", c.x, c.y));
+            } else if (!inAura && c.supportAuraActive) {
+                c.supportAuraActive = false;
+                c.atk -= 5; c.mag -= 5; c.armor -= 5; c.cloak -= 5;
+            }
+        }
+
         // --- Fire damage on turn start ---
         // Every burning tile deals fireTurnsActive true damage to any character
         // or structure on it, then ticks age and duration forward.
@@ -939,9 +990,10 @@ public class GameEngine {
     }
 
     /**
-     * Central damage application. Handles Billy reveal, mitigation, death.
+     * Central damage application. Handles Billy reveal, mitigation, type modifiers, death.
+     * Pass null for attacker when damage has no source character (e.g. environment).
      */
-    public void applyDamage(GameState state, Character target,
+    public void applyDamage(GameState state, Character attacker, Character target,
                             int rawPhys, int rawMag, int rawTrue,
                             Array<EngineEvent> events) {
         checkAndTriggerBillyTrail(state, target, events);
@@ -956,8 +1008,29 @@ public class GameEngine {
         int total     = finalPhys + finalMag + rawTrue;
 
         if (total > 0) {
+            float mult = 1.0f;
+            if (target.getCharType() == Enums.CharType.ANGELIC) mult *= 0.5f;
+            if (attacker != null) {
+                if (hasTypeAdvantage(attacker.getCharType(), target.getCharType())) mult *= 1.25f;
+                if (attacker.getCharType() == Enums.CharType.NIGHTMARE)            mult *= 1.25f;
+            }
+            total = Math.max(1, Math.round(total * mult));
+
             target.health = Math.max(0, target.health - total);
             if (target.isDead()) handleDeath(target, state, events);
+        }
+    }
+
+    /** Fire>Flora>Fauna>Wind>Aqua>Fire cycle — attacker deals 25% more to the matched defender. */
+    private boolean hasTypeAdvantage(Enums.CharType atk, Enums.CharType def) {
+        if (atk == null || def == null) return false;
+        switch (atk) {
+            case FIRE:  return def == Enums.CharType.FLORA;
+            case FLORA: return def == Enums.CharType.FAUNA;
+            case FAUNA: return def == Enums.CharType.WIND;
+            case WIND:  return def == Enums.CharType.AQUA;
+            case AQUA:  return def == Enums.CharType.FIRE;
+            default:    return false;
         }
     }
 

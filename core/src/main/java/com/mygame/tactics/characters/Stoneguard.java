@@ -13,7 +13,7 @@ import com.mygame.tactics.GameState;
 public class Stoneguard extends Character {
 
     public Stoneguard(Texture portrait) {
-        super("Stoneguard", portrait, Enums.CharClass.TANK, Enums.CharType.FLORA, Enums.Alliance.NONE);
+        super("Stoneguard", portrait, Enums.CharClass.TANK, Enums.CharType.FIRE, Enums.Alliance.NONE);
         this.rarity = Enums.Rarity.COMMON;
         this.originLocation = "Trade Hub";
         this.baseMaxHealth = 120;

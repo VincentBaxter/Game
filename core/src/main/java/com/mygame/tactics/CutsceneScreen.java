@@ -124,6 +124,10 @@ public class CutsceneScreen implements Screen {
 
         if (data.backgroundPath != null) background = loadTexture(data.backgroundPath);
         queue.addAll(data.beats);
+        // Seed prev-state so a click held from a previous screen doesn't immediately advance
+        prevTouched = Gdx.input.isTouched();
+        prevSpace   = Gdx.input.isKeyPressed(Input.Keys.SPACE)
+                   || Gdx.input.isKeyPressed(Input.Keys.ENTER);
         advance();
     }
 
@@ -181,6 +185,31 @@ public class CutsceneScreen implements Screen {
             } else if (next instanceof CutsceneData.BackgroundChangeBeat) {
                 if (background != null) background.dispose();
                 background = loadTexture(((CutsceneData.BackgroundChangeBeat) next).path);
+                continue;
+            } else if (next instanceof CutsceneData.CondBeat) {
+                CutsceneData.CondBeat cb = (CutsceneData.CondBeat) next;
+                com.badlogic.gdx.utils.Array<CutsceneData.Beat> branch =
+                        cb.eval(flags) ? cb.thenBeats : cb.elseBeats;
+                for (int i = branch.size - 1; i >= 0; i--) queue.insert(0, branch.get(i));
+                continue;
+            } else if (next instanceof CutsceneData.GiveGoldBeat) {
+                Main.inventory.gold += ((CutsceneData.GiveGoldBeat) next).amount;
+                Main.inventory.save(flags);
+                continue;
+            } else if (next instanceof CutsceneData.GiveItemBeat) {
+                CutsceneData.GiveItemBeat gb = (CutsceneData.GiveItemBeat) next;
+                Item.ItemSlot sl;
+                try { sl = Item.ItemSlot.valueOf(gb.slot); } catch (Exception e) { sl = Item.ItemSlot.MISC; }
+                Item given = new Item(gb.name, gb.description, sl);
+                given.iconName = gb.iconName;
+                applyKnownItemMods(given);
+                Main.inventory.addToBag(given);
+                Main.inventory.save(flags);
+                continue;
+            } else if (next instanceof CutsceneData.TakeItemBeat) {
+                CutsceneData.TakeItemBeat tb = (CutsceneData.TakeItemBeat) next;
+                Main.inventory.removeFromBag(tb.name, tb.count);
+                Main.inventory.save(flags);
                 continue;
             }
 
@@ -433,11 +462,14 @@ public class CutsceneScreen implements Screen {
         String key = speaker.toLowerCase();
         if (portraitCache.containsKey(key)) return portraitCache.get(key);
         try {
-            com.badlogic.gdx.files.FileHandle fh = Gdx.files.internal(key + ".png");
-            if (fh.exists()) {
-                Texture t = new Texture(fh);
-                portraitCache.put(key, t);
-                return t;
+            // Try lowercase first, then original casing (handles Willow.png vs willow.png in JAR)
+            for (String name : new String[]{key, speaker}) {
+                com.badlogic.gdx.files.FileHandle fh = Gdx.files.internal(name + ".png");
+                if (fh.exists()) {
+                    Texture t = new Texture(fh);
+                    portraitCache.put(key, t);
+                    return t;
+                }
             }
         } catch (Exception ignored) {}
         portraitCache.put(key, null);
@@ -451,5 +483,17 @@ public class CutsceneScreen implements Screen {
         } catch (Exception ignored) {}
         Gdx.app.error("CutsceneScreen", "Texture not found: " + path);
         return null;
+    }
+
+    static void applyKnownItemMods(Item item) {
+        switch (item.name) {
+            case "Axe":         item.atkMod = 3;                        break;
+            case "Pickaxe":     item.atkMod = 3;                        break;
+            case "Staff":       item.magMod = 10;                       break;
+            case "Sword":       item.atkMod = 10;                       break;
+            case "Boots":       item.speedMod = -100;                   break;
+            case "Chest Armor": item.armorMod = 8;  item.cloakMod = 8; break;
+            case "Helmet":      item.armorMod = 5;  item.cloakMod = 5; break;
+        }
     }
 }

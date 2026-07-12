@@ -3,7 +3,6 @@ package com.mygame.tactics;
 import java.awt.FileDialog;
 import java.awt.Frame;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.Net;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
@@ -16,6 +15,7 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.mygame.tactics.network.NetworkClient;
 
 /**
  * Main menu screen.
@@ -196,7 +196,10 @@ public class MenuScreen implements Screen {
             }
         } else if (btnOnline.contains(world.x, world.y)) {
             Main.stopMenuMusic();
-            game.setScreen(new CharacterCreationScreen(game));
+            // Always connect first — OnlineScreen.enterWorld() handles both the
+            // first-time (cutscene + character creation) and returning-player paths
+            // once the connection succeeds.
+            game.setScreen(new OnlineScreen(game, new NetworkClient()));
         } else if (btnSettings.contains(world.x, world.y)) {
             game.setScreen(new SettingsScreen(game)); // no stopMenuMusic — music continues
         }

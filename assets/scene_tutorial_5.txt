@@ -1,0 +1,6 @@
+BACKGROUND storybg_forest.png
+SAY Evan: I hear something else up ahead.
+SAY Willow: These woods are mine. I suggest you turn back.
+SAY Evan: This fight may be a little more difficult. Fescue was a support class character who relies more on helping her allies.
+SAY Evan: Willow is a mage, who gets stronger the longer the fight lasts. Let's be careful here.
+SAY Willow: You'll be the one weeping soon.

@@ -1,0 +1,2 @@
+BACKGROUND storybg_forest.png
+SAY Evan: Well good thing the bridge held up for us. But this is where I leave you. Hopefully you like the abilities you've chosen. Looks like you might be stuck with for a while unless that bridge can get fixed.

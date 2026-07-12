@@ -39,6 +39,7 @@ import com.mygame.tactics.characters.Tyler;
 import com.mygame.tactics.characters.Weirdguard;
 import com.mygame.tactics.characters.Ben;
 import com.mygame.tactics.characters.Fescue;
+import com.mygame.tactics.characters.Willow;
 import com.mygame.tactics.network.NetworkClient;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
@@ -131,7 +132,7 @@ public class DraftScreen implements Screen {
     // Combat cave mode — team2 and config come from a loaded combat board file
     private Array<Character> presetTeam2    = null;
     private BoardConfig      presetConfig   = null;
-    private Runnable         onCombatComplete = null;
+    private java.util.function.Consumer<Boolean> onCombatComplete = null;
 
     // -----------------------------------------------------------------------
     // Scroll state
@@ -173,7 +174,7 @@ public class DraftScreen implements Screen {
 
     /** Combat cave mode — player drafts team1; team2 and board config come from the combat file. */
     public DraftScreen(Main game, Array<Character> presetTeam2, BoardConfig presetConfig,
-                       Runnable onCombatComplete) {
+                       java.util.function.Consumer<Boolean> onCombatComplete) {
         this(game, null, 0, false, 0, 0, 0, null, new String[]{"Team 1", "Team 2"});
         this.presetTeam2       = presetTeam2;
         this.presetConfig      = presetConfig;
@@ -299,8 +300,9 @@ public class DraftScreen implements Screen {
         pool.add(new Ghia      (new Texture("ghia.png")));
         pool.add(new Maxx      (new Texture("maxx.png")));
         pool.add(new Ben       (new Texture("ben.png")));
-        pool.add(new Aevan       (new Texture("aevan.png")));
-        pool.add(new Fescue      (new Texture("fescue.png")));
+        pool.add(new Aevan     (new Texture("aevan.png")));
+        pool.add(new Fescue    (new Texture("fescue.png")));
+        pool.add(new Willow    (new Texture("willow.png")));
     }
 
     /** Looks up a Character in the local pool by name. */

@@ -21,6 +21,9 @@ import com.mygame.tactics.network.NetworkClient;
  */
 public class CharacterCreationScreen implements Screen {
 
+    /** Set via the tutorial constructor — overrides the default OnlineScreen transition. */
+    private Runnable onComplete = null;
+
     // -----------------------------------------------------------------------
     // Layout constants
     // -----------------------------------------------------------------------
@@ -156,7 +159,8 @@ public class CharacterCreationScreen implements Screen {
             if (wx >= CONT_X && wx < CONT_X + CONT_W && wy >= CONT_Y && wy < CONT_Y + CONT_H) {
                 if (appearance.username.trim().isEmpty()) appearance.username = "Player";
                 saveAppearance(appearance);
-                game.setScreen(new OnlineScreen(game, new NetworkClient(), appearance));
+                if (onComplete != null) onComplete.run();
+                else game.setScreen(new OnlineScreen(game, new NetworkClient(), appearance));
             }
 
             return true;
@@ -164,8 +168,15 @@ public class CharacterCreationScreen implements Screen {
     };
 
     // -----------------------------------------------------------------------
-    // Constructor
+    // Constructors
     // -----------------------------------------------------------------------
+
+    /** Tutorial flow constructor — runs onComplete instead of going to OnlineScreen. */
+    public CharacterCreationScreen(Main game, Runnable onComplete) {
+        this(game);
+        this.onComplete = onComplete;
+    }
+
     public CharacterCreationScreen(Main game) {
         this.game = game;
         camera   = new OrthographicCamera();
@@ -440,20 +451,11 @@ public class CharacterCreationScreen implements Screen {
     private SpriteBatch b() { return game.batch; }
 
     private static PlayerAppearance loadSavedAppearance() {
-        PlayerAppearance ap = new PlayerAppearance();
-        ap.username      = Main.flags.getString("ap_username", "Player");
-        ap.modelType     = Main.flags.get("ap_modelType");
-        ap.skinColorIdx  = Main.flags.get("ap_skinColorIdx");
-        ap.shirtColorIdx = Main.flags.get("ap_shirtColorIdx");
-        ap.pantsColorIdx = Main.flags.get("ap_pantsColorIdx");
-        return ap;
+        PlayerAppearance saved = PlayerAppearance.load(Main.flags);
+        return saved != null ? saved : new PlayerAppearance();
     }
 
     private static void saveAppearance(PlayerAppearance ap) {
-        Main.flags.setString("ap_username",      ap.username);
-        Main.flags.set("ap_modelType",     ap.modelType);
-        Main.flags.set("ap_skinColorIdx",  ap.skinColorIdx);
-        Main.flags.set("ap_shirtColorIdx", ap.shirtColorIdx);
-        Main.flags.set("ap_pantsColorIdx", ap.pantsColorIdx);
+        ap.save(Main.flags);
     }
 }

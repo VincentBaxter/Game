@@ -1,0 +1,3 @@
+BACKGROUND storybg_forest.png
+SAY Evan: That wasn't so much of a challenge either huh.
+SAY Evan: I thought my eyes deceived me the first time, but you'll want to collect those souls when you find them. They contain the essence of that character.

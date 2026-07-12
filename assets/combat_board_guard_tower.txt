@@ -1,0 +1,3 @@
+COMBAT_BOARD
+boardType=FOREST
+spawn=GuardTower,4,8

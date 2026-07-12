@@ -25,6 +25,7 @@ import com.mygame.tactics.characters.Stoneguard;
 import com.mygame.tactics.characters.Thomas;
 import com.mygame.tactics.characters.Tyler;
 import com.mygame.tactics.characters.Weirdguard;
+import com.mygame.tactics.characters.Willow;
 
 /**
  * Central registry of all playable characters.
@@ -64,6 +65,7 @@ public class CharacterRoster {
         new Entry("Ben",        Ben.class,        () -> new Ben(null)),
         new Entry("Aevan",      Aevan.class,      () -> new Aevan(null)),
         new Entry("Fescue",     Fescue.class,     () -> new Fescue(null)),
+        new Entry("Willow",     Willow.class,     () -> new Willow(null)),
     };
 
     /** All character names in draft pool order. */

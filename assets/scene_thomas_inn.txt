@@ -1,0 +1,29 @@
+IF fix_stairs_started == 0
+SAY Thomas: Nice to meet you, I'm Thomas.
+CHOICE Tell me about yourself.
+OPTION What do you do?
+SAY Thomas: I'm a builder. I just moved into the inn a few days ago to work on the stairs.
+OPTION Where are you from?
+SAY Thomas: I'm from up north. I travel around doing work wherever it's needed.
+END_CHOICE
+SAY Thomas: It was nice to meet you, but I need to get back to work.
+SAY Thomas: Actually, could you lend me a hand?
+SAY Thomas: If you're out in the woods, I need some violetberries to stain the stairs. Could you get three of them and bring them back to me here?
+CHOICE
+OPTION Yes, I can do that.
+FLAG fix_stairs_started 1
+OPTION Maybe another time.
+END_CHOICE
+ELSE
+IF violetberries_count >= 3
+SAY You: I've got the violetberries.
+SAY Thomas: Thank you, these are perfect.
+SAY Thomas: Could you do me one more favor? Can you return this axe to Luke? Head back to the river and go north. He's cutting down some dead trees near Haven's main entrance.
+GIVE_ITEM Axe|An axe for chopping wood.|WEAPON|item_axe
+TAKE_ITEM Violetberries|3
+FLAG fix_stairs_complete 1
+FLAG violetberries_count 0
+ELSE
+SAY Thomas: Back already? I still need those three violetberries from the woods.
+ENDIF
+ENDIF

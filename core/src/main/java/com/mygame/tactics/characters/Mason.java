@@ -60,7 +60,7 @@ public class Mason extends Character {
                 int finalPhys = Math.max(0, user.getAtk() - target.getArmor());
                 finalPhys = CombatUtils.applyCrit(user, finalPhys, events, tx, ty);
                 events.add(new EngineEvent.PopupEvent("CLAW", finalPhys, "ATK", tx, ty));
-                state.engine.applyDamage(state, target, 0, 0, finalPhys, events);
+                state.engine.applyDamage(state, user, target, 0, 0, finalPhys, events);
             } else if (target == null && state.board.getTile(tx, ty) != null
                     && state.board.getTile(tx, ty).hasStructure()) {
                 state.engine.applyStructureDamageAtTile(state, tx, ty, user.getAtk(), events);

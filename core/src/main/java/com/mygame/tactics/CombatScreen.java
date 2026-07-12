@@ -50,7 +50,7 @@ public class CombatScreen implements Screen {
     private       BotController botController;
     private       float         botTimer = 0f;
     // Called instead of returning to MenuScreen when combat ends in bot/cave mode
-    private       Runnable      onComplete = null;
+    private java.util.function.Consumer<Boolean> onComplete = null;
 
     // -----------------------------------------------------------------------
     // Rendering-only
@@ -132,6 +132,61 @@ public class CombatScreen implements Screen {
     private Array<Rectangle> disguiseOptionBounds = new Array<>();
 
     // -----------------------------------------------------------------------
+    // Combat tutorial — shown once on first-ever combat
+    // -----------------------------------------------------------------------
+    private int     tutStep          = -1;
+    private boolean tutChecked       = false;
+    private int     tutAbilitiesRead = 0; // bitmask: bit 0/1/2 set when ability 0/1/2 clicked in step 4
+    private final Rectangle tutContBtn = new Rectangle(0, 0, 0, 0);
+
+    // Haven first-step tutorial banner
+    private float havenTutBannerTimer = 0f;
+    private static final float HAVEN_TUT_DURATION = 8f;
+    private static final String HAVEN_TUT_LINE1 = "Standing on The Haven buffs your character's stats as the game goes on.";
+    private static final String HAVEN_TUT_LINE2 = "Controlling the haven can be just as important as killing your enemies.";
+
+    private static final String[] TUTO_TEXT = {
+        "When entering combat, your team's characters are displayed on the left side.",
+        "Your opponent's characters are displayed on the right.",
+        "At the bottom are your character's abilities. Each character has three abilities.",
+        "The first two are common abilities and the third ability is a special ability that can only be used once per combat.",
+        "Let's take a look at Evan's abilities. When you click on an ability its description will appear in the bottom left. Click and read each ability.",
+        "As you've seen, his first ability is a basic attack that does ATTACK damage. His second ability allows him to move again, and stacks his third ability which pushes enemies in a chosen direction.",
+        "Evan's only damage source is Trident Rush which does ATTACK damage. When attacking an enemy, your final damage result will be attack - armor, or magic - cloak.",
+        "The timeline above shows the order that characters move in as well as when the outer ring will collapse. Make sure you're not on a tile that's going to collapse.",
+        "Each turn has two phases: first you move, then you use an ability. Since Evan is a Fighter, he gets a bonus move after attacking — use it to position for your next strike!",
+        "Let's begin."
+    };
+
+    // Highlight region per step [x, y, w, h]; null = full-screen dim, no window
+    private static final float[][] TUTO_HL = {
+        {0,   0,  370, 720}, // 0: left sidebar
+        {910, 0,  370, 720}, // 1: right sidebar
+        {380, 10, 522,  90}, // 2: ability buttons
+        {380, 10, 522,  90}, // 3: ability buttons
+        {0,   10, 902,  90}, // 4: abilities + description panel
+        {0,   10, 902,  90}, // 5: same
+        {0,   0,  370, 720}, // 6: left sidebar (stats)
+        {380, 660, 522, 60}, // 7: timeline strip
+        null,                // 8: turn order explanation
+        null                 // 9: no highlight
+    };
+
+    // Tooltip card position and size per step [x, y, w, h]
+    private static final float[][] TUTO_CARD = {
+        {420,  220, 490, 190}, // 0: right of left sidebar
+        { 60,  220, 490, 190}, // 1: left of right sidebar
+        {330,  380, 620, 190}, // 2: above ability buttons
+        {330,  380, 620, 190}, // 3
+        {330,  380, 620, 200}, // 4
+        {330,  370, 620, 220}, // 5: taller for longer text
+        {420,  220, 490, 220}, // 6: right of left sidebar
+        {330,  200, 620, 200}, // 7: below timeline
+        {330,  270, 620, 180}, // 8: turn order
+        {330,  290, 620, 130}, // 9: center
+    };
+
+    // -----------------------------------------------------------------------
     // Constructors
     // -----------------------------------------------------------------------
     public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config) {
@@ -144,7 +199,7 @@ public class CombatScreen implements Screen {
     }
 
     public CombatScreen(Main game, Array<Character> team1, Array<Character> team2, BoardConfig config,
-                        String[] teamNames, boolean botMatch, Runnable onComplete) {
+                        String[] teamNames, boolean botMatch, java.util.function.Consumer<Boolean> onComplete) {
         this(game, team1, team2, config, teamNames, botMatch);
         this.onComplete = onComplete;
     }
@@ -474,13 +529,12 @@ public class CombatScreen implements Screen {
         havenTileTexture = new Texture("tile_haven.png");
         try { windIconTexture = new Texture("wind_icon.png"); } catch (Exception ignored) {}
 
-        // Music disabled — uncomment to re-enable
-        // try {
-        //     yourTurnMusic  = Gdx.audio.newMusic(Gdx.files.internal("YourTurnMusic.mp3"));
-        //     enemyTurnMusic = Gdx.audio.newMusic(Gdx.files.internal("EnemyTurnMusic.mp3"));
-        //     yourTurnMusic.setLooping(true);
-        //     enemyTurnMusic.setLooping(true);
-        // } catch (Exception ignored) {}
+        try {
+            yourTurnMusic  = Gdx.audio.newMusic(Gdx.files.internal("YourTurnMusic.mp3"));
+            enemyTurnMusic = Gdx.audio.newMusic(Gdx.files.internal("EnemyTurnMusic.mp3"));
+            yourTurnMusic.setLooping(true);
+            enemyTurnMusic.setLooping(true);
+        } catch (Exception ignored) {}
 
         // Type icons
         for (Enums.CharType t : Enums.CharType.values()) {
@@ -557,9 +611,24 @@ public class CombatScreen implements Screen {
         if (matchOverReturnDelay > 0f) {
             matchOverReturnDelay -= delta;
             if (matchOverReturnDelay <= 0f) {
-                if (onComplete != null) onComplete.run();
+                if (onComplete != null) onComplete.accept(state.winnerTeam == 1);
                 else game.setScreen(new MenuScreen(game));
                 return;
+            }
+        }
+
+        // Start combat tutorial on first frame of battle (not during pre-game deployment)
+        if (tutChecked && tutStep < 0 && state.isBattle() && !Main.flags.is("combat_tutorial_shown")) {
+            tutStep = 0;
+        }
+
+        // Haven first-step tutorial
+        if (state.isBattle() && state.havenOccupant != null
+                && !Main.flags.is("haven_tutorial_shown")) {
+            int playerTeam = (myTeam == 0) ? 1 : myTeam;
+            if (state.havenOccupant.team == playerTeam) {
+                Main.flags.set("haven_tutorial_shown", 1);
+                havenTutBannerTimer = HAVEN_TUT_DURATION;
             }
         }
 
@@ -624,7 +693,108 @@ public class CombatScreen implements Screen {
 
         game.font.setColor(Color.WHITE);
         game.font.getData().setScale(1.0f);
+
+        drawTutorial(game.batch);
+        drawHavenTutBanner(game.batch, delta);
+
         game.batch.end();
+    }
+
+    // -----------------------------------------------------------------------
+    // Tutorial drawing
+    // -----------------------------------------------------------------------
+    private void drawTutorial(SpriteBatch b) {
+        if (tutStep < 0 || tutStep >= TUTO_TEXT.length) return;
+
+        float[] hl = TUTO_HL[tutStep];
+        b.setColor(0f, 0f, 0f, 0.72f);
+        if (hl == null) {
+            b.draw(whitePixel, 0, 0, 1280, 720);
+        } else {
+            float hx = hl[0], hy = hl[1], hw = hl[2], hh = hl[3];
+            b.draw(whitePixel, 0,       0,       1280,            hy);               // below HL
+            b.draw(whitePixel, 0,       hy + hh, 1280,            720 - (hy + hh)); // above HL
+            b.draw(whitePixel, 0,       hy,      hx,              hh);              // left of HL
+            b.draw(whitePixel, hx + hw, hy,      1280 - (hx + hw), hh);            // right of HL
+            float t = 2f;
+            b.setColor(1f, 0.84f, 0f, 0.75f);
+            b.draw(whitePixel, hx - t,      hy - t,  hw + t * 2, t);   // bottom edge
+            b.draw(whitePixel, hx - t,      hy + hh, hw + t * 2, t);   // top edge
+            b.draw(whitePixel, hx - t,      hy,      t,          hh);  // left edge
+            b.draw(whitePixel, hx + hw,     hy,      t,          hh);  // right edge
+        }
+        b.setColor(Color.WHITE);
+
+        float[] cd = TUTO_CARD[tutStep];
+        float cx = cd[0], cy = cd[1], cw = cd[2], ch = cd[3];
+
+        b.setColor(0.07f, 0.07f, 0.13f, 0.97f);
+        b.draw(whitePixel, cx, cy, cw, ch);
+        b.setColor(1f, 0.84f, 0f, 1f);
+        b.draw(whitePixel, cx,            cy,           cw, 2f); // bottom border
+        b.draw(whitePixel, cx,            cy + ch - 2f, cw, 2f); // top border
+        b.draw(whitePixel, cx,            cy,           3f, ch); // left border
+        b.draw(whitePixel, cx + cw - 2f,  cy,           2f, ch); // right border
+        b.setColor(Color.WHITE);
+
+        game.font.getData().setScale(0.55f);
+        game.font.setColor(0.93f, 0.93f, 0.96f, 1f);
+        game.font.draw(b, TUTO_TEXT[tutStep], cx + 14f, cy + ch - 14f, cw - 24f, -1, true);
+
+        float btnW = 130f, btnH = 35f;
+        float btnX = cx + cw - btnW - 10f;
+        float btnY = cy + 10f;
+        boolean allAbilitiesRead = (tutStep != 4) || (tutAbilitiesRead == 0b111);
+        b.setColor(allAbilitiesRead ? new Color(0.16f,0.16f,0.28f,1f) : new Color(0.10f,0.10f,0.16f,1f));
+        b.draw(whitePixel, btnX, btnY, btnW, btnH);
+        b.setColor(allAbilitiesRead ? new Color(1f,0.84f,0f,1f) : new Color(0.4f,0.35f,0.1f,1f));
+        b.draw(whitePixel, btnX, btnY, 3f, btnH);
+        b.setColor(allAbilitiesRead ? Color.WHITE : new Color(0.5f,0.5f,0.5f,1f));
+        game.font.getData().setScale(0.48f);
+        boolean last = (tutStep == TUTO_TEXT.length - 1);
+        String btnLabel = !allAbilitiesRead
+                ? "Click abilities (" + Integer.bitCount(tutAbilitiesRead) + "/3)"
+                : (last ? "LET'S GO!" : "CONTINUE »");
+        game.font.draw(b, btnLabel, btnX, btnY + btnH - 8f, btnW, 1, true);
+        game.font.getData().setScale(1f);
+        game.font.setColor(Color.WHITE);
+        b.setColor(Color.WHITE);
+
+        tutContBtn.set(btnX, btnY, btnW, btnH);
+    }
+
+    private void drawHavenTutBanner(SpriteBatch b, float delta) {
+        if (havenTutBannerTimer <= 0f) return;
+        havenTutBannerTimer -= delta;
+        float alpha = Math.min(1f, Math.min(havenTutBannerTimer, HAVEN_TUT_DURATION - havenTutBannerTimer) * 2f);
+        float bw = 720f, bh = 90f, bx = (1280f - bw) / 2f, by = 580f;
+        b.setColor(0.05f, 0.10f, 0.20f, alpha * 0.92f);
+        b.draw(whitePixel, bx, by, bw, bh);
+        b.setColor(0.90f, 0.75f, 0.10f, alpha);
+        b.draw(whitePixel, bx,      by,      bw, 2f);
+        b.draw(whitePixel, bx,      by+bh-2, bw, 2f);
+        b.draw(whitePixel, bx,      by,      2f, bh);
+        b.draw(whitePixel, bx+bw-2, by,      2f, bh);
+        b.setColor(Color.WHITE);
+
+        game.font.getData().setScale(0.58f);
+        game.font.setColor(1f, 0.88f, 0.30f, alpha);
+        game.font.draw(b, "THE HAVEN", bx + bw / 2f - 60f, by + bh - 10f);
+        game.font.getData().setScale(0.52f);
+        game.font.setColor(0.93f, 0.93f, 0.96f, alpha);
+        game.font.draw(b, HAVEN_TUT_LINE1, bx + 12f, by + bh - 30f, bw - 24f, -1, true);
+        game.font.draw(b, HAVEN_TUT_LINE2, bx + 12f, by + bh - 52f, bw - 24f, -1, true);
+        game.font.getData().setScale(1f);
+        game.font.setColor(Color.WHITE);
+        b.setColor(Color.WHITE);
+    }
+
+    private void advanceTutorial() {
+        tutStep++;
+        if (tutStep >= TUTO_TEXT.length) {
+            tutStep = -1;
+            Main.flags.set("combat_tutorial_shown", 1);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -684,6 +854,49 @@ public class CombatScreen implements Screen {
 
         Vector3 world = camera.unproject(
                 new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0));
+
+        // Tutorial intercept — step 4 lets ability-button clicks pass through; all others advance on any click
+        if (tutStep >= 0) {
+            if (tutStep == 4) {
+                if (tutContBtn.contains(world.x, world.y) && tutAbilitiesRead == 0b111) { advanceTutorial(); return; }
+                // Block clicks outside the ability button strip; allow those inside to fall through
+                if (world.y < BUTTON_Y || world.y > BUTTON_Y + BUTTON_H
+                        || world.x < BOARD_START_X || world.x > BOARD_START_X + 9 * 58f) return;
+            } else {
+                advanceTutorial();
+                return;
+            }
+        }
+
+        // ABILITY BUTTONS — must be checked before pre-game blocks so clicks register during tutorial
+        float btnW0 = (9 * 58f) / 3f;
+        for (int i = 0; i < 3; i++) {
+            float bx0 = BOARD_START_X + (i * btnW0);
+            if (world.x >= bx0 && world.x <= bx0 + btnW0
+                    && world.y >= BUTTON_Y && world.y <= BUTTON_Y + BUTTON_H) {
+                if (!state.isAbilityPhase() && tutStep != 4) return;
+                if (i == 1 && state.activeUnit instanceof Hunter && state.activeUnit.isInvisible()) return;
+                if (i == 0 && state.activeUnit instanceof Mason && state.activeUnit.isInvisible()) return;
+                if (i == 2 && state.activeUnit != null && state.activeUnit.isUltUsed()) return;
+                Ability clicked = state.activeUnit != null ? state.activeUnit.getAbility(i) : null;
+                if (clicked == null) return;
+                if (state.selectedAbility == clicked) {
+                    state.selectedAbility = null;
+                    state.targetableTiles.clear();
+                    state.reachableTiles.clear();
+                } else {
+                    state.selectedAbility = clicked;
+                    if (tutStep == 4) tutAbilitiesRead |= (1 << i);
+                    if (state.isAbilityPhase() && !clicked.isDirectionAbility) {
+                        engine.calculateTargetRange(state, clicked);
+                    }
+                    if (state.isAbilityPhase() && clicked.grantsMovement) {
+                        engine.calculateMovementRange(state);
+                    }
+                }
+                return;
+            }
+        }
 
         // PRE-GAME: STATUE deployment
         if (state.isPreGame() && state.activeUnit.getCharClass() == Enums.CharClass.STATUE
@@ -759,35 +972,6 @@ public class CombatScreen implements Screen {
                 }
             }
             return;
-        }
-
-        // ABILITY BUTTONS
-        float btnW = (9 * 58f) / 3f;
-        for (int i = 0; i < 3; i++) {
-            float bx = BOARD_START_X + (i * btnW);
-            if (world.x >= bx && world.x <= bx + btnW
-                    && world.y >= BUTTON_Y && world.y <= BUTTON_Y + BUTTON_H) {
-                if (!state.isAbilityPhase()) return;
-                if (i == 1 && state.activeUnit instanceof Hunter && state.activeUnit.isInvisible()) return;
-                if (i == 0 && state.activeUnit instanceof Mason && state.activeUnit.isInvisible()) return;
-                if (i == 2 && state.activeUnit.isUltUsed()) return;
-                Ability clicked = state.activeUnit.getAbility(i);
-                if (clicked == null) return;
-                if (state.selectedAbility == clicked) {
-                    state.selectedAbility = null;
-                    state.targetableTiles.clear();
-                    state.reachableTiles.clear();
-                } else {
-                    state.selectedAbility = clicked;
-                    if (!clicked.isDirectionAbility) {
-                        engine.calculateTargetRange(state, clicked);
-                    }
-                    if (clicked.grantsMovement) {
-                        engine.calculateMovementRange(state);
-                    }
-                }
-                return;
-            }
         }
 
         // GRID CLICK
@@ -1734,7 +1918,9 @@ public class CombatScreen implements Screen {
         engine.moveHaven(state, newX, newY, new Array<>());
     }
 
-    @Override public void show()   {}
+    @Override public void show() {
+        if (!tutChecked) tutChecked = true;
+    }
     @Override public void resize(int w, int h) { viewport.update(w, h); }
     @Override public void pause()  {}
     @Override public void resume() {}

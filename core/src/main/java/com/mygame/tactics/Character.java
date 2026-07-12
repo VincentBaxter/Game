@@ -33,7 +33,8 @@ public abstract class Character {
     public boolean isRooted = false;
     public boolean isInvisible = false;
     public boolean hasDeployed = false;
-    public boolean pergolaRangeActive = false; // true while standing on a Luke pergola tile
+    public boolean pergolaRangeActive  = false; // true while standing on a Luke pergola tile
+    public boolean supportAuraActive   = false; // true while adjacent to an ally SUPPORT character
     
     // The "Wait" Countdown logic (Relativity System)
     // A lower value means the character is closer to their turn.

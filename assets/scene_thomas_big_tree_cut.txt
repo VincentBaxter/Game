@@ -1,0 +1,4 @@
+BACKGROUND storybg_forest.png
+FLAG repair_bridge_big_tree_cut 1
+SAY Thomas: Well there we go. Now just gotta carry it all the way back to the bridge.
+SAY Thomas: This is gonna be a real pain in the ass.

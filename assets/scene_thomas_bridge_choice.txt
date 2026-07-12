@@ -1,0 +1,12 @@
+BACKGROUND storybg_forest.png
+SAY Thomas: Well everything's starting to go wrong here. We're either going to need a massive beam to stretch the river, or get more rocks to build the pillar up more.
+SAY Thomas: What do you think we should do?
+CHOICE
+OPTION Get a massive beam.
+FLAG repair_bridge_choice 1
+SAY Thomas: Ok, that's definitely going to be a two man job.
+SAY Thomas: We're going to need to find a pretty big tree to be able to span across the river.
+SAY Thomas: Let's go find one, I guess.
+OPTION Get more stones.
+FLAG repair_bridge_choice 2
+END_CHOICE

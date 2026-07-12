@@ -1,0 +1,2 @@
+BACKGROUND storybg_forest.png
+SAY Evan: We don't lose again do we?

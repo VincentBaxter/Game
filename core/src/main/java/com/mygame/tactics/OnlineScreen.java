@@ -55,8 +55,9 @@ public class OnlineScreen implements Screen {
     private final NetworkClient      client;
     final         PlayerAppearance   appearance;
 
-    private State  state        = State.ENTERING_IP;
-    private String serverIp     = "";
+    private String serverIp     = Main.flags.getString("server_ip", "");
+    private State  state        = (Main.flags.is("ap_saved") && !serverIp.isEmpty())
+                                    ? State.CONNECTING : State.ENTERING_IP;
     private String errorMessage = "";
     private float  dotTimer     = 0f;
     private int    dotCount     = 0;
@@ -70,7 +71,17 @@ public class OnlineScreen implements Screen {
     // Constructor
     // -----------------------------------------------------------------------
     public OnlineScreen(Main game, NetworkClient client) {
-        this(game, client, new PlayerAppearance());
+        this(game, client, loadSavedAppearance());
+    }
+
+    private static PlayerAppearance loadSavedAppearance() {
+        PlayerAppearance ap = new PlayerAppearance();
+        ap.username      = Main.flags.getString("ap_username", "Player");
+        ap.modelType     = Main.flags.get("ap_modelType");
+        ap.skinColorIdx  = Main.flags.get("ap_skinColorIdx");
+        ap.shirtColorIdx = Main.flags.get("ap_shirtColorIdx");
+        ap.pantsColorIdx = Main.flags.get("ap_pantsColorIdx");
+        return ap;
     }
 
     public OnlineScreen(Main game, NetworkClient client, PlayerAppearance appearance) {
@@ -113,6 +124,22 @@ public class OnlineScreen implements Screen {
     }
 
     private void enterWorld() {
+        // First-time player: play intro cutscene then character creation before entering world
+        if (Main.flags.getString("ap_username", "").isEmpty()) {
+            com.badlogic.gdx.files.FileHandle sf =
+                    com.badlogic.gdx.Gdx.files.internal("scene_tutorial_1.txt");
+            Runnable doCreate = () -> game.setScreen(new CharacterCreationScreen(game, () ->
+                    game.setScreen(new OnlineScreen(game, client, loadSavedAppearance()))));
+            if (sf.exists()) {
+                try {
+                    CutsceneData d = CutsceneData.load(sf);
+                    game.setScreen(new CutsceneScreen(game, d, Main.flags, doCreate));
+                    return;
+                } catch (Exception ignored) {}
+            }
+            doCreate.run();
+            return;
+        }
         WorldArea mainMap = loadArea("Test_Map.txt");
         if (mainMap == null) {
             state        = State.ERROR;
@@ -120,12 +147,29 @@ public class OnlineScreen implements Screen {
             return;
         }
 
+        // Reconnect: restore the player to the exact area and position they left.
+        String savedAreaFile = Main.flags.getString("online_area", "");
+        if (!savedAreaFile.isEmpty() && Main.flags.is("online_pos_saved")) {
+            WorldArea savedArea = loadArea(savedAreaFile);
+            if (savedArea != null) {
+                savedArea.applyOverrides(Main.flags);
+                int spawnX = Main.flags.get("online_x");
+                int spawnY = Main.flags.get("online_y");
+                boolean isMainMap = savedAreaFile.equals("Test_Map.txt");
+                WorldArea returnArea = isMainMap ? null : mainMap;
+                int returnX = isMainMap ? -1 : mainMap.spawnX;
+                int returnY = isMainMap ? -1 : mainMap.spawnY;
+                game.setScreen(new WorldScreen(game, savedArea, returnArea, returnX, returnY,
+                        spawnX, spawnY, appearance, client));
+                return;
+            }
+        }
+
         // If tutorial not yet complete, spawn into it with the main map as the return area.
         if (!Main.flags.is("area_tutorial_complete")) {
             WorldArea tutorial = loadArea("area_tutorial.txt");
             if (tutorial != null) {
                 tutorial.applyOverrides(Main.flags);
-                // Spawn at the area's defined spawn point; exiting the top row returns to main map.
                 game.setScreen(new WorldScreen(game, tutorial, mainMap, mainMap.spawnX, mainMap.spawnY,
                         tutorial.spawnX, tutorial.spawnY, appearance, client));
                 return;
@@ -133,7 +177,12 @@ public class OnlineScreen implements Screen {
         }
 
         mainMap.applyOverrides(Main.flags);
-        game.setScreen(new WorldScreen(game, mainMap, appearance, client));
+        int spawnX = mainMap.spawnX, spawnY = mainMap.spawnY;
+        if (Main.flags.is("online_pos_saved")) {
+            spawnX = Main.flags.get("online_x");
+            spawnY = Main.flags.get("online_y");
+        }
+        game.setScreen(new WorldScreen(game, mainMap, null, -1, -1, spawnX, spawnY, appearance, client));
     }
 
     /** Loads a WorldArea by filename from the JAR classpath. */
@@ -150,6 +199,11 @@ public class OnlineScreen implements Screen {
     // -----------------------------------------------------------------------
     @Override
     public void show() {
+        // Returning player — connection attempt already started via initial state; kick thread here
+        if (Main.flags.is("ap_saved") && !serverIp.isEmpty()) {
+            attemptConnect();
+        }
+
         Gdx.input.setInputProcessor(new InputAdapter() {
  
             @Override
@@ -247,10 +301,10 @@ public class OnlineScreen implements Screen {
             return;
         }
 
-        // Retry on error
+        // Retry on error — reconnect immediately with the same IP
         if (state == State.ERROR && connectBounds.contains(world.x, world.y)) {
-            state        = State.ENTERING_IP;
             errorMessage = "";
+            attemptConnect();
         }
     }
 
@@ -260,6 +314,7 @@ public class OnlineScreen implements Screen {
             state        = State.ERROR;
             return;
         }
+        Main.flags.setString("server_ip", serverIp.trim());
         state = State.CONNECTING;
         new Thread(() -> {
             try {

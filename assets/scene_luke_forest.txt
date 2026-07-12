@@ -1,0 +1,35 @@
+IF fix_stairs_complete == 0
+SAY Luke: Hey there.
+CHOICE
+OPTION Who are you?
+SAY Luke: I'm Luke. I do woodwork and construction around Haven.
+OPTION Where are you from?
+SAY Luke: I grew up just east of here actually.
+END_CHOICE
+ELSE
+IF man_in_woods_complete >= 1
+SAY Luke: Hey. Let me know if you ever need more work.
+ELSE
+IF man_in_woods_trees_cut >= 4
+SAY Luke: Good work. If you're ever looking for more, you can find me at my house east of here, unless I'm at a job.
+SAY Luke: I don't have any gold on me, but you can keep the logs and the axe.
+SAY You: Thank you.
+FLAG man_in_woods_complete 1
+ELSE
+IF man_in_woods_started >= 1
+SAY Luke: Those trees aren't going to cut themselves. Cut down all four of them.
+ELSE
+SAY You: Are you Luke? I have your axe.
+SAY Luke: What timing, I just went and picked up a new axe.
+SAY Luke: I appreciate you bringing it to me though.
+SAY Luke: The Queen asked me to clear out these dead trees blocking Haven's main entrance and I've been looking for that axe for days.
+SAY Luke: Have you ever cut down a tree before?
+CHOICE
+OPTION No.
+SAY Luke: Perfect time to learn. Equip the axe and cut these trees down.
+END_CHOICE
+FLAG man_in_woods_started 1
+ENDIF
+ENDIF
+ENDIF
+ENDIF

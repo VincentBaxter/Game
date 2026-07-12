@@ -1,0 +1,3 @@
+BACKGROUND storybg_forest.png
+FLAG repair_bridge_tree_approached 1
+SAY Thomas: That tree looks like it'll do. Let's chop it down.

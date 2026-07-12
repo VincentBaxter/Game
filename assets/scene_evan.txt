@@ -1,0 +1,12 @@
+BACKGROUND storybg_forest.png
+IF evan_met
+SAY Evan: Not from around here are you?
+SAY Evan: Anyways, where are you headed? These woods aren't the safest place to be.
+NARRATOR I'm just looking for a place to stay for the night.
+SAY Evan: There's an inn just up the trail ahead. I'll take you there. It's not the nicest place, but there's a roof and a bed.
+NARRATOR Who are you?
+SAY Evan: I'm not from around here either, but I'm a friend.
+ELSE
+SAY Evan: You look out of place in these woods. Where are you from stranger?
+FLAG evan_met 1
+ENDIF

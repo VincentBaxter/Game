@@ -65,7 +65,19 @@ public class CombatBoardLoader {
         return new Result(config, team2);
     }
 
-    private static Character createCharacter(String name) {
+    /** Builds a team from a pipe-separated name string (e.g. "Evan" or "Evan|Tyler"). */
+    public static com.badlogic.gdx.utils.Array<Character> buildTeam(String preset) {
+        com.badlogic.gdx.utils.Array<Character> team = new com.badlogic.gdx.utils.Array<>();
+        for (String name : preset.split("\\|")) {
+            name = name.trim();
+            if (name.isEmpty()) continue;
+            Character c = createCharacter(name);
+            if (c != null) { c.team = 1; team.add(c); }
+        }
+        return team;
+    }
+
+    static Character createCharacter(String name) {
         try {
             switch (name) {
                 case "Aaron":      return new Aaron      (new Texture("aaron.png"));
@@ -93,6 +105,7 @@ public class CombatBoardLoader {
                 case "Thomas":     return new Thomas     (new Texture("thomas.png"));
                 case "Tyler":      return new Tyler      (new Texture("tyler.png"));
                 case "Weirdguard": return new Weirdguard (new Texture("weirdguard.png"));
+                case "Willow":     return new Willow     (new Texture("willow.png"));
                 default:           return null;
             }
         } catch (Exception e) {

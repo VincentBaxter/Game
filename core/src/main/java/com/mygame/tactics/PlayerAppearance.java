@@ -39,4 +39,25 @@ public class PlayerAppearance {
     public Color getSkinColor()  { return SKIN_COLORS[skinColorIdx]; }
     public Color getShirtColor() { return CLOTHES_COLORS[shirtColorIdx]; }
     public Color getPantsColor() { return CLOTHES_COLORS[pantsColorIdx]; }
+
+    public void save(PlayerFlags flags) {
+        flags.setString("ap_username",      username);
+        flags.set("ap_modelType",     modelType);
+        flags.set("ap_skinColorIdx",  skinColorIdx);
+        flags.set("ap_shirtColorIdx", shirtColorIdx);
+        flags.set("ap_pantsColorIdx", pantsColorIdx);
+        flags.set("ap_saved",         1);
+    }
+
+    /** Returns a loaded appearance if one was previously saved, or null. */
+    public static PlayerAppearance load(PlayerFlags flags) {
+        if (!flags.is("ap_saved")) return null;
+        PlayerAppearance ap = new PlayerAppearance();
+        ap.username      = flags.getString("ap_username", "Player");
+        ap.modelType     = flags.get("ap_modelType");
+        ap.skinColorIdx  = flags.get("ap_skinColorIdx");
+        ap.shirtColorIdx = flags.get("ap_shirtColorIdx");
+        ap.pantsColorIdx = flags.get("ap_pantsColorIdx");
+        return ap;
+    }
 }

@@ -1,0 +1,2 @@
+BACKGROUND storybg_forest.png
+SAY Evan: Whatever loot you find you can keep. I'm on a long journey and can't carry anything extra.

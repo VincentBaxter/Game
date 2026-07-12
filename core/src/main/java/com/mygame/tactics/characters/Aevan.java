@@ -52,7 +52,7 @@ public class Aevan extends Character {
                 int finalMag = Math.max(0, user.getMag() - target.getCloak());
                 finalMag = CombatUtils.applyCrit(user, finalMag, events, tx, ty);
                 events.add(new EngineEvent.PopupEvent("DISC", finalMag, "MAG", tx, ty));
-                state.engine.applyDamage(state, target, 0, 0, finalMag, events);
+                state.engine.applyDamage(state, user, target, 0, 0, finalMag, events);
             } else if (target == null && state.board.getTile(tx, ty) != null
                     && state.board.getTile(tx, ty).hasStructure()) {
                 state.engine.applyStructureDamageAtTile(state, tx, ty, user.getMag(), events);
@@ -97,7 +97,7 @@ public class Aevan extends Character {
                 int dmg = target.health - 1;
                 if (dmg > 0) {
                     events.add(new EngineEvent.PopupEvent("HOLE IN ONE", dmg, "TRUE", tx, ty));
-                    state.engine.applyDamage(state, target, 0, 0, dmg, events);
+                    state.engine.applyDamage(state, user, target, 0, 0, dmg, events);
                 }
             }
             return AbilityResult.END_TURN;

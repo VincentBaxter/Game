@@ -1,0 +1,3 @@
+BACKGROUND storybg_forest.png
+SAY Evan: The bridge is just up ahead. I’ll take you there, but then we must part ways.
+SAY Evan: Remember those souls you collected? This Runic Stone will allow you to channel those characters so you won’t be so helpless. Go unleash the souls into the stone now.

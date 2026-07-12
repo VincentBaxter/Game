@@ -1,0 +1,525 @@
+areaId=new_area
+width=16
+height=32
+spawnX=7
+spawnY=0
+-,map_corner_wall1,0,0,-,1
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wood_floor,-,1,1,-,0
+tile_wood_floor,-,1,1,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+-,map_corner_wall1,0,0,-,1
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,1
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_barstool_top,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_barstool_right,0,0,-,1
+tile_wood_floor,map_bar_table,0,0,-,1
+tile_wood_floor,map_barstool_left,0,0,-,1
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_barstool_bottom,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,map_rug,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wood_floor,map_corner_wall1,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,map_barstool_top,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,map_barstool_top,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,map_barstool_top,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,map_barstool_top,0,0,-,1
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,map_bar_left,0,0,-,1
+tile_wood_floor,map_barstool_top,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall vertical,-,0,0,-,0
+tile_wood_floor,map_corner_wall1,0,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_brickwall,-,1,0,-,0
+tile_unknown,-,1,0,-,0
+tile_unknown,-,1,0,-,0
+tile_brickwall,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,map_stairs,0,1,-,1
+tile_wood_floor,map_stairs,0,1,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_brickwall,-,1,0,-,0
+tile_unknown,-,1,0,-,0
+tile_unknown,-,1,0,-,0
+tile_brickwall,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,map_stairs,0,0,-,0
+tile_wood_floor,map_stairs,0,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wood_floor,-,1,0,-,1
+tile_wood_floor,-,1,0,-,0
+tile_brickwall_br,-,1,0,-,0
+tile_unknown,-,1,0,-,0
+tile_unknown,-,1,0,-,0
+tile_brickwall_bl,-,1,0,-,0
+tile_wood_floor,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,map_stairs,0,0,-,0
+tile_wall horizontal,map_stairs,0,0,-,0
+tile_wall horizontal,-,1,0,-,0
+tile_wall horizontal,-,1,0,-,0
+-,map_corner_wall1,0,0,-,1
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_brickwall,-,1,0,-,0
+tile_brickwall,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+tile_wall vertical,-,1,0,-,0
+-,map_corner_wall1,0,0,-,1
+override=fix_stairs_complete,>=,1,12,28,obj,map_stairs_stained
+override=fix_stairs_complete,>=,1,13,28,obj,map_stairs_stained
+override=fix_stairs_complete,>=,1,12,29,obj,map_stairs_stained
+override=fix_stairs_complete,>=,1,13,29,obj,map_stairs_stained
+override=fix_stairs_complete,>=,1,12,30,obj,map_stairs_stained
+override=fix_stairs_complete,>=,1,13,30,obj,map_stairs_stained
+npc=Thomas,12,27,1,scene_thomas_inn,-,fix_stairs_complete,-,-,0,-
+npc=Meg,2,3,1,-,-,-,-,-,0,-

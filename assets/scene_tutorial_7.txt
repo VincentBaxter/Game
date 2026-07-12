@@ -1,0 +1,5 @@
+BACKGROUND storybg_forest.png
+SAY Evan: See that bridge up ahead? The inn is just down that path across the bridge. We're almost there.
+SAY Evan: Wait. There's something else ahead.
+SAY Evan: This should hopefully be the easiest challenger yet. Stoneguard is a fire type character and I'm aquatic. My attacks will deal extra damage to him.
+SAY Stoneguard: *Hard rock noises... surprisingly no guitar*

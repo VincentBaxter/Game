@@ -1,0 +1,19 @@
+BACKGROUND storybg_forest.png
+IF repair_bridge_intro_seen == 0
+SAY Jame: Did you hear? I guess that big storm that came through absolutely poured rain up north.
+SAY Jame: A big swell of water must have come down and knocked out the bridge to the island.
+SAY Thomas: Yea, I'm going to start working on fixing that tomorrow, now that the stairs at the Inn are finished.
+SAY Thomas: It's going to be a lot of work, that's for sure.
+SAY Thomas: Hey, it's you again. Want to help me fix the bridge? I'll just need you to help me grab a few materials.
+FLAG repair_bridge_intro_seen 1
+ELSE
+SAY Thomas: Ready to help fix the bridge?
+ENDIF
+CHOICE
+OPTION Yea, I'll give you a hand.
+FLAG repair_bridge_started 1
+SAY Thomas: Great! Can you meet me at the bridge with 12 logs? I'm going to run out and grab my saw.
+SAY Thomas: Logs can be kind of heavy, don't be afraid to take multiple trips.
+OPTION I'll pass for now.
+SAY Thomas: No worries. Come find me if you change your mind.
+END_CHOICE

@@ -1,0 +1,3 @@
+BACKGROUND storybg_forest.png
+SAY Luke: Whose There!? You ever hear of knocking?!
+SAY Luke: No one breaks into my home and makes it out alive!

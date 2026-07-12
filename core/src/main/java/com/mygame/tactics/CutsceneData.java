@@ -112,6 +112,56 @@ public class CutsceneData {
         public BackgroundChangeBeat(String path) { this.path = path; }
     }
 
+    /**
+     * Conditional branch. Evaluates flagKey op threshold against PlayerFlags;
+     * the matching branch's beats are inserted into the queue and played.
+     * Script syntax:
+     *   IF flagKey op value
+     *   ...then beats...
+     *   ELSE              (optional)
+     *   ...else beats...
+     *   ENDIF
+     */
+    public static class CondBeat extends Beat {
+        public final String      flagKey;
+        public final String      op;
+        public final int         threshold;
+        public final Array<Beat> thenBeats = new Array<>();
+        public final Array<Beat> elseBeats = new Array<>();
+        public CondBeat(String flagKey, String op, int threshold) {
+            this.flagKey   = flagKey;
+            this.op        = op;
+            this.threshold = threshold;
+        }
+        public boolean eval(PlayerFlags flags) {
+            return flags.check(flagKey, op, threshold);
+        }
+    }
+
+    /** Removes items from the player's bag. Applied silently.
+     *  Script syntax: TAKE_ITEM name|count  (count defaults to all if omitted) */
+    public static class TakeItemBeat extends Beat {
+        public final String name;
+        public final int    count;
+        public TakeItemBeat(String name, int count) { this.name = name; this.count = count; }
+    }
+
+    /** Awards gold to the player. Applied silently. Script syntax: GOLD amount */
+    public static class GiveGoldBeat extends Beat {
+        public final int amount;
+        public GiveGoldBeat(int amount) { this.amount = amount; }
+    }
+
+    /** Adds an item to the player's bag. Applied silently.
+     *  Script syntax: GIVE_ITEM name|description|slot|iconName */
+    public static class GiveItemBeat extends Beat {
+        public final String name, description, slot, iconName;
+        public GiveItemBeat(String name, String description, String slot, String iconName) {
+            this.name = name; this.description = description;
+            this.slot = slot; this.iconName = iconName;
+        }
+    }
+
     // =========================================================
     // Script loader
     // =========================================================
@@ -132,24 +182,25 @@ public class CutsceneData {
             idx[0]++;
         }
 
-        data.beats = parseBeats(lines, idx, false);
+        data.beats = parseBeats(lines, idx, false, false);
         return data;
     }
 
     /**
      * Parses a sequence of beats starting at idx[0].
      *
-     * @param insideOption  When true, stop (without consuming) on OPTION or END_CHOICE
-     *                      so the caller can handle the option boundary.
+     * @param insideOption  When true, stop (without consuming) on OPTION or END_CHOICE.
+     * @param insideCond    When true, stop (without consuming) on ELSE or ENDIF.
      */
-    private static Array<Beat> parseBeats(Array<String> lines, int[] idx, boolean insideOption) {
+    private static Array<Beat> parseBeats(Array<String> lines, int[] idx,
+                                          boolean insideOption, boolean insideCond) {
         Array<Beat> beats = new Array<>();
 
         while (idx[0] < lines.size) {
             String line = lines.get(idx[0]);
 
-            // Let the parent CHOICE loop handle these boundaries
             if (insideOption && (line.startsWith("OPTION ") || line.equals("END_CHOICE"))) break;
+            if (insideCond  && (line.equals("ELSE") || line.equals("ENDIF"))) break;
 
             idx[0]++;
 
@@ -180,9 +231,9 @@ public class CutsceneData {
                     }
                 }
 
-            } else if (line.startsWith("CHOICE ")) {
+            } else if (line.equals("CHOICE") || line.startsWith("CHOICE ")) {
                 ChoiceBeat choice = new ChoiceBeat(
-                        line.substring("CHOICE ".length()).trim());
+                        line.length() > 7 ? line.substring("CHOICE ".length()).trim() : "");
 
                 // Collect options until END_CHOICE
                 while (idx[0] < lines.size && !lines.get(idx[0]).equals("END_CHOICE")) {
@@ -190,10 +241,10 @@ public class CutsceneData {
                     if (ol.startsWith("OPTION ")) {
                         idx[0]++;
                         Option opt = new Option(ol.substring("OPTION ".length()).trim());
-                        opt.beats.addAll(parseBeats(lines, idx, true)); // recursive
+                        opt.beats.addAll(parseBeats(lines, idx, true, false));
                         choice.options.add(opt);
                     } else {
-                        idx[0]++; // skip unexpected lines inside a CHOICE block
+                        idx[0]++;
                     }
                 }
                 if (idx[0] < lines.size) idx[0]++; // consume END_CHOICE
@@ -203,6 +254,39 @@ public class CutsceneData {
             } else if (line.startsWith("BACKGROUND ")) {
                 beats.add(new BackgroundChangeBeat(
                         line.substring("BACKGROUND ".length()).trim()));
+
+            } else if (line.startsWith("IF ")) {
+                String[] parts = line.substring(3).trim().split("\\s+", 3);
+                if (parts.length == 3) {
+                    try {
+                        CondBeat cb = new CondBeat(parts[0], parts[1], Integer.parseInt(parts[2]));
+                        cb.thenBeats.addAll(parseBeats(lines, idx, false, true));
+                        if (idx[0] < lines.size && lines.get(idx[0]).equals("ELSE")) {
+                            idx[0]++; // consume ELSE
+                            cb.elseBeats.addAll(parseBeats(lines, idx, false, true));
+                        }
+                        if (idx[0] < lines.size && lines.get(idx[0]).equals("ENDIF")) {
+                            idx[0]++; // consume ENDIF
+                        }
+                        beats.add(cb);
+                    } catch (NumberFormatException ignored) {}
+                }
+
+            } else if (line.startsWith("GOLD ")) {
+                try {
+                    beats.add(new GiveGoldBeat(Integer.parseInt(line.substring(5).trim())));
+                } catch (NumberFormatException ignored) {}
+
+            } else if (line.startsWith("GIVE_ITEM ")) {
+                String[] p = line.substring("GIVE_ITEM ".length()).trim().split("\\|", 4);
+                if (p.length == 4) {
+                    beats.add(new GiveItemBeat(p[0].trim(), p[1].trim(), p[2].trim(), p[3].trim()));
+                }
+
+            } else if (line.startsWith("TAKE_ITEM ")) {
+                String[] p = line.substring("TAKE_ITEM ".length()).trim().split("\\|", 2);
+                int cnt = p.length > 1 ? Integer.parseInt(p[1].trim()) : Integer.MAX_VALUE;
+                beats.add(new TakeItemBeat(p[0].trim(), cnt));
             }
             // Any unrecognised line is silently ignored
         }

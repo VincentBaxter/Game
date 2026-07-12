@@ -14,6 +14,9 @@ public class Main extends Game {
     /** Per-player story flags — persisted to disk, accessible from any screen. */
     public static PlayerFlags flags;
 
+    /** Player inventory — persisted via flags, accessible from any screen. */
+    public static PlayerInventory inventory;
+
     /** Global music volume [0.0, 1.0] — persisted via LibGDX Preferences. */
     public static float musicVolume = 1.0f;
 
@@ -52,7 +55,9 @@ public class Main extends Game {
         //     menuMusic.setLooping(true);
         // } catch (Exception ignored) {}
 
-        flags = new PlayerFlags();
+        flags     = new PlayerFlags();
+        inventory = new PlayerInventory();
+        inventory.load(flags);
         batch = new SpriteBatch();
         font = new BitmapFont(Gdx.files.internal("font.fnt"));
         font.getRegion().getTexture().setFilter(

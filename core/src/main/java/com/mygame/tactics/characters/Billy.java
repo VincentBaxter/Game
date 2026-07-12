@@ -105,7 +105,7 @@ public class Billy extends Character {
                 total = CombatUtils.applyCrit(user, total, events, tx, ty);
 
                 events.add(new EngineEvent.PopupEvent("VENOM", total, "ATK", tx, ty));
-                state.engine.applyDamage(state, target, 0, 0, total, events);
+                state.engine.applyDamage(state, user, target, 0, 0, total, events);
             } else if (target == null && state.board.getTile(tx, ty) != null
                     && state.board.getTile(tx, ty).hasStructure()) {
                 boolean wasInvisible = user.isInvisible();

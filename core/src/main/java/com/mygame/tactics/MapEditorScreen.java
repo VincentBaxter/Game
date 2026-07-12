@@ -117,7 +117,8 @@ public class MapEditorScreen implements Screen, InputProcessor {
     private static final String[] ALL_CHARS = {
         "Hunter","Sean","Jaxon","Evan","Billy","Aaron","Speen","Mason","Lark","Nathan",
         "Luke","Brad","GuardTower","Weirdguard","Stoneguard","Snowguard","Tyler",
-        "Anna","Emily","Thomas","Ghia","Maxx","Ben","Aevan","Fescue"
+        "Anna","Emily","Thomas","Ghia","Maxx","Ben","Aevan","Fescue","Willow","Meg","Jame",
+        "Witch","Ghost","Queen"
     };
 
     // ---- Brush sentinels ----
@@ -169,7 +170,8 @@ public class MapEditorScreen implements Screen, InputProcessor {
     private boolean rightDragUndoPushed = false;
 
     // Hover and selected map tile
-    private int hovX = -1, hovY = -1;
+    private int     hovX = -1, hovY = -1;
+    private boolean hovValid = false;   // true when mouse is over the map view area
     private int selX = -1, selY = -1;
 
     // ---- Editor mode ----
@@ -245,7 +247,16 @@ public class MapEditorScreen implements Screen, InputProcessor {
     private static String[] readManifest() {
         try {
             FileHandle f = Gdx.files.internal("tile_manifest.txt");
-            if (f.exists()) return f.readString().split("\\r?\\n");
+            if (f.exists()) {
+                String[] lines = f.readString().split("\\r?\\n");
+                String[] ids = new String[lines.length];
+                for (int i = 0; i < lines.length; i++) {
+                    String line = lines[i].trim();
+                    int tab = line.indexOf('\t');
+                    ids[i] = (tab >= 0) ? line.substring(tab + 1).trim() : line;
+                }
+                return ids;
+            }
         } catch (Exception ignored) {}
         return new String[0];
     }
@@ -312,6 +323,8 @@ public class MapEditorScreen implements Screen, InputProcessor {
             n.charName = npc.charName; n.x = npc.x; n.y = npc.y;
             n.interactable = npc.interactable; n.triggerAreaId = npc.triggerAreaId;
             n.combatFile = npc.combatFile; n.winFlag = npc.winFlag;
+            n.winCutsceneId = npc.winCutsceneId; n.lossCutsceneId = npc.lossCutsceneId;
+            n.followsPlayer = npc.followsPlayer; n.team1Preset = npc.team1Preset;
             copy.npcs.add(n);
         }
         return copy;
@@ -333,6 +346,81 @@ public class MapEditorScreen implements Screen, InputProcessor {
             for (int y = 0; y < Math.min(old.height, newH); y++)
                 next.tiles[x][y] = old.tiles[x][y].copy();
         return next;
+    }
+
+    /**
+     * Expands the area so that the tile range (minTx,minTy)-(maxTx,maxTy) fits within bounds.
+     * Existing tiles, NPCs, overrides, spawn, and editor state are shifted by the returned offset.
+     * Returns {offsetX, offsetY} — how much existing coordinates were shifted.
+     */
+    private int[] expandToFit(int minTx, int minTy, int maxTx, int maxTy) {
+        int addLeft   = Math.max(0, -minTx);
+        int addBottom = Math.max(0, -minTy);
+        int addRight  = Math.max(0, maxTx - area.width  + 1);
+        int addTop    = Math.max(0, maxTy - area.height + 1);
+        if (addLeft == 0 && addBottom == 0 && addRight == 0 && addTop == 0) return new int[]{0, 0};
+
+        WorldArea next = new WorldArea(area.areaId, area.width + addLeft + addRight, area.height + addBottom + addTop);
+        next.sourceFile = area.sourceFile;
+        next.spawnX = area.spawnX >= 0 ? area.spawnX + addLeft : -1;
+        next.spawnY = area.spawnY >= 0 ? area.spawnY + addBottom : -1;
+        for (int x = 0; x < area.width; x++)
+            for (int y = 0; y < area.height; y++)
+                next.tiles[x + addLeft][y + addBottom] = area.tiles[x][y].copy();
+        for (WorldArea.FlagOverride ov : area.overrides) {
+            WorldArea.FlagOverride c = new WorldArea.FlagOverride();
+            c.flagKey = ov.flagKey; c.op = ov.op; c.threshold = ov.threshold;
+            c.x = ov.x + addLeft; c.y = ov.y + addBottom;
+            c.layer = ov.layer; c.tileId = ov.tileId;
+            next.overrides.add(c);
+        }
+        for (WorldArea.WorldNpc npc : area.npcs) {
+            WorldArea.WorldNpc n = new WorldArea.WorldNpc();
+            n.charName = npc.charName;
+            n.x = npc.x + addLeft; n.y = npc.y + addBottom;
+            n.interactable = npc.interactable; n.triggerAreaId = npc.triggerAreaId;
+            n.combatFile = npc.combatFile; n.winFlag = npc.winFlag;
+            n.winCutsceneId = npc.winCutsceneId; n.lossCutsceneId = npc.lossCutsceneId;
+            n.followsPlayer = npc.followsPlayer; n.team1Preset = npc.team1Preset;
+            next.npcs.add(n);
+        }
+        area = next;
+
+        // Shift camera so the existing map stays visually fixed
+        camX += addLeft * tileSize;
+        camY += addBottom * tileSize;
+        if (selX >= 0)        { selX += addLeft;        selY += addBottom; }
+        if (shapeAnchorX >= 0){ shapeAnchorX += addLeft; shapeAnchorY += addBottom; }
+        clampCamera();
+
+        return new int[]{addLeft, addBottom};
+    }
+
+    /**
+     * Computes the bounding box for the current shape tool from shapeAnchorX/Y to (endX, endY),
+     * expands the area to fit it, and returns the coordinate offset applied.
+     */
+    private int[] expandForShape(int endX, int endY) {
+        int minTx, minTy, maxTx, maxTy;
+        if (drawMode == DrawMode.RECT) {
+            minTx = Math.min(shapeAnchorX, endX); minTy = Math.min(shapeAnchorY, endY);
+            maxTx = Math.max(shapeAnchorX, endX); maxTy = Math.max(shapeAnchorY, endY);
+        } else { // CIRCLE
+            int r = (int) Math.ceil(Math.sqrt(
+                    (double)(endX - shapeAnchorX) * (endX - shapeAnchorX) +
+                    (double)(endY - shapeAnchorY) * (endY - shapeAnchorY)));
+            minTx = shapeAnchorX - r; minTy = shapeAnchorY - r;
+            maxTx = shapeAnchorX + r; maxTy = shapeAnchorY + r;
+        }
+        return expandToFit(minTx, minTy, maxTx, maxTy);
+    }
+
+    /** True when the current brush should auto-expand the map on out-of-bounds paint. */
+    private boolean isTileExpandBrush() {
+        return brush != null
+            && brush != BRUSH_WALK && brush != BRUSH_INTER
+            && brush != BRUSH_SPAWN && brush != BRUSH_NPC
+            && brush != ERASE_BG   && brush != ERASE_OBJ;
     }
 
     // ---- Screen lifecycle ----
@@ -360,20 +448,28 @@ public class MapEditorScreen implements Screen, InputProcessor {
         Vector3 mp = unproject(Gdx.input.getX(), Gdx.input.getY());
 
         if (editorMode == EditorMode.WORLD) {
-            // Update hover tile
+            // Update hover tile — allow out-of-bounds coords for expand-on-paint
+            hovValid = false;
             hovX = hovY = -1;
             if (inMapArea(mp.x, mp.y)) {
-                int tx = toTileX(mp.x), ty = toTileY(mp.y);
-                if (inBounds(tx, ty)) { hovX = tx; hovY = ty; }
+                hovValid = true;
+                hovX = toTileX(mp.x);
+                hovY = toTileY(mp.y);
             }
-            // Held left-click: paint (suppressed in fill mode — fill fires on touchDown only)
-            if (drawMode == DrawMode.NONE && !midDragging && Gdx.input.isButtonPressed(Input.Buttons.LEFT) && hovX >= 0) {
+            // Held left-click: paint (suppressed in fill/shape modes — those fire on touchDown only)
+            if (drawMode == DrawMode.NONE && !midDragging && Gdx.input.isButtonPressed(Input.Buttons.LEFT) && hovValid) {
                 if (!leftDragUndoPushed) { pushUndo(); leftDragUndoPushed = true; }
-                paintAt(hovX, hovY);
+                if (inBounds(hovX, hovY)) {
+                    paintAt(hovX, hovY);
+                } else if (isTileExpandBrush()) {
+                    int[] off = expandToFit(hovX, hovY, hovX, hovY);
+                    hovX += off[0]; hovY += off[1];
+                    paintAt(hovX, hovY);
+                }
             }
             if (!Gdx.input.isButtonPressed(Input.Buttons.LEFT)) leftDragUndoPushed = false;
-            // Held right-click: erase
-            if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT) && hovX >= 0) {
+            // Held right-click: erase (only on existing in-bounds tiles)
+            if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT) && hovValid && inBounds(hovX, hovY)) {
                 if (!rightDragUndoPushed) { pushUndo(); rightDragUndoPushed = true; }
                 eraseAt(hovX, hovY);
             }
@@ -549,14 +645,13 @@ public class MapEditorScreen implements Screen, InputProcessor {
             int y0 = Math.min(ay, by), y1 = Math.max(ay, by);
             for (int x = x0; x <= x1; x++)
                 for (int y = y0; y <= y1; y++)
-                    if (inBounds(x, y)) list.add(new int[]{x, y});
+                    list.add(new int[]{x, y});
         } else if (drawMode == DrawMode.CIRCLE) {
             double r = Math.sqrt((double)(bx - ax) * (bx - ax) + (double)(by - ay) * (by - ay));
             int ri = (int) Math.ceil(r);
             for (int x = ax - ri; x <= ax + ri; x++)
                 for (int y = ay - ri; y <= ay + ri; y++)
-                    if (inBounds(x, y)
-                            && Math.sqrt((double)(x - ax) * (x - ax) + (double)(y - ay) * (y - ay)) <= r + 0.5)
+                    if (Math.sqrt((double)(x - ax) * (x - ax) + (double)(y - ay) * (y - ay)) <= r + 0.5)
                         list.add(new int[]{x, y});
         }
         return list;
@@ -738,7 +833,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
             b.draw(whitePixel, ax2,                  ay2,                  2, tileSize);
             b.draw(whitePixel, ax2 + tileSize - 2,   ay2,                  2, tileSize);
             // Projected shape preview when cursor is on map
-            if (hovX >= 0) {
+            if (hovValid) {
                 Texture bt = brush != null ? tileTextures.get(brush) : null;
                 for (int[] t : getShapeTiles(shapeAnchorX, shapeAnchorY, hovX, hovY)) {
                     float px = MAP_X + t[0] * tileSize - camX;
@@ -747,10 +842,33 @@ public class MapEditorScreen implements Screen, InputProcessor {
                         b.setColor(1f, 1f, 1f, 0.40f);
                         b.draw(bt, px, py, tileSize, tileSize);
                     }
-                    b.setColor(1f, 0.8f, 0f, 0.25f);
+                    // Orange tint for out-of-bounds tiles, yellow for in-bounds
+                    if (inBounds(t[0], t[1])) {
+                        b.setColor(1f, 0.8f, 0f, 0.25f);
+                    } else {
+                        b.setColor(1f, 0.55f, 0f, 0.40f);
+                    }
                     b.draw(whitePixel, px, py, tileSize, tileSize);
                 }
             }
+        }
+
+        // Out-of-bounds single-tile hover preview (orange = "will expand map here")
+        if (hovValid && !inBounds(hovX, hovY) && drawMode == DrawMode.NONE && isTileExpandBrush()) {
+            float dx = MAP_X + hovX * tileSize - camX;
+            float dy = MAP_Y + hovY * tileSize - camY;
+            Texture bt = tileTextures.get(brush);
+            if (bt != null) {
+                b.setColor(1f, 1f, 1f, 0.55f);
+                b.draw(bt, dx, dy, tileSize, tileSize);
+            }
+            b.setColor(1f, 0.55f, 0f, 0.35f);
+            b.draw(whitePixel, dx, dy, tileSize, tileSize);
+            b.setColor(1f, 0.55f, 0f, 1f);
+            b.draw(whitePixel, dx,                dy,                tileSize, 2);
+            b.draw(whitePixel, dx,                dy + tileSize - 2, tileSize, 2);
+            b.draw(whitePixel, dx,                dy,                2, tileSize);
+            b.draw(whitePixel, dx + tileSize - 2, dy,                2, tileSize);
         }
 
         // Map border
@@ -1143,7 +1261,7 @@ public class MapEditorScreen implements Screen, InputProcessor {
         game.font.getData().setScale(0.44f);
         game.font.setColor(Color.LIGHT_GRAY);
         if (editorMode == EditorMode.WORLD) {
-            String coordLabel = hovX >= 0 ? "   cursor: (" + hovX + ", " + hovY + ")"
+            String coordLabel = hovValid ? "   cursor: (" + hovX + ", " + hovY + ")"
                               : selX >= 0 ? "   selected: (" + selX + ", " + selY + ")" : "";
             game.font.draw(b, area.areaId + "   (" + area.width + " x " + area.height + ")" + coordLabel,
                     700, BTN_BY + BTN_BH - 4f);
@@ -1241,19 +1359,24 @@ public class MapEditorScreen implements Screen, InputProcessor {
                 }
                 if (inMapArea(w.x, w.y)) {
                     int tx = toTileX(w.x), ty = toTileY(w.y);
-                    if (inBounds(tx, ty)) {
-                        if (drawMode == DrawMode.FILL && brush != null && brush.startsWith("tile_")) {
+                    if (drawMode == DrawMode.FILL) {
+                        if (brush != null && brush.startsWith("tile_") && inBounds(tx, ty)) {
                             pushUndo();
                             floodFill(tx, ty);
-                        } else if (drawMode == DrawMode.RECT || drawMode == DrawMode.CIRCLE) {
-                            if (shapeAnchorX < 0) {
-                                shapeAnchorX = tx; shapeAnchorY = ty; // first click: set anchor
-                            } else {
-                                pushUndo();
-                                fillShape(shapeAnchorX, shapeAnchorY, tx, ty);
-                                shapeAnchorX = -1;
-                            }
-                        } else if (brush == BRUSH_WALK) {
+                        }
+                    } else if (drawMode == DrawMode.RECT || drawMode == DrawMode.CIRCLE) {
+                        if (shapeAnchorX < 0) {
+                            shapeAnchorX = tx; shapeAnchorY = ty; // first click: anchor (can be outside bounds)
+                        } else {
+                            pushUndo();
+                            int[] off = expandForShape(tx, ty); // expand area to fit full shape, returns offset
+                            tx += off[0]; ty += off[1];         // shapeAnchorX/Y already shifted inside expandForShape
+                            fillShape(shapeAnchorX, shapeAnchorY, tx, ty);
+                            shapeAnchorX = -1;
+                        }
+                    } else if (inBounds(tx, ty)) {
+                        // In-bounds tile — all brush types work normally
+                        if (brush == BRUSH_WALK) {
                             pushUndo(); leftDragUndoPushed = true;
                             paintWalkValue = !area.tiles[tx][ty].walkable;
                             paintAt(tx, ty);
@@ -1273,6 +1396,14 @@ public class MapEditorScreen implements Screen, InputProcessor {
                             pushUndo(); leftDragUndoPushed = true;
                             selX = tx; selY = ty; paintAt(tx, ty);
                         }
+                    } else if (isTileExpandBrush()) {
+                        // Out-of-bounds tile brush — expand map then paint
+                        pushUndo(); leftDragUndoPushed = true;
+                        int[] off = expandToFit(tx, ty, tx, ty);
+                        tx += off[0]; ty += off[1];
+                        hovX += off[0]; hovY += off[1];
+                        selX = tx; selY = ty;
+                        paintAt(tx, ty);
                     }
                     return true;
                 }

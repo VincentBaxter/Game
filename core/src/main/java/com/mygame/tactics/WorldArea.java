@@ -15,6 +15,11 @@ public class WorldArea {
     /** Absolute path this area was loaded from; null for newly created areas. */
     public String sourceFile = null;
 
+    /** Cutscene to play once on first area entry (gated by "{areaId}_entry_played" flag). */
+    public String entryCutsceneId     = null;
+    /** Cutscene to play after name entry following the entry cutscene. */
+    public String postEntryCutsceneId = null;
+
     // -----------------------------------------------------------------------
     // Flag-based tile overrides
     // -----------------------------------------------------------------------
@@ -41,6 +46,35 @@ public class WorldArea {
 
     public final java.util.List<FlagOverride> overrides = new java.util.ArrayList<>();
 
+    /**
+     * A whole-map swap: when the flag condition is true, load targetFile instead of this area.
+     * Evaluated after tile overrides so fine-grained changes still apply to the base map.
+     *
+     * Stored in the map file as:
+     *   swapMap=flagKey,op,threshold,targetFile
+     *
+     * Example — replace this area with the post-quest version once cleared:
+     *   swapMap=spider_cave_cleared,>=,1,area_forest_post.txt
+     */
+    public static class SwapMapOverride {
+        public String flagKey;
+        public String op;
+        public int    threshold;
+        public String targetFile;
+    }
+
+    public final java.util.List<SwapMapOverride> swapMaps = new java.util.ArrayList<>();
+
+    /**
+     * Returns the targetFile of the first SwapMapOverride whose condition is met, or null.
+     */
+    public String resolveSwapMap(PlayerFlags flags) {
+        for (SwapMapOverride sm : swapMaps) {
+            if (flags.check(sm.flagKey, sm.op, sm.threshold)) return sm.targetFile;
+        }
+        return null;
+    }
+
     // -----------------------------------------------------------------------
     // NPCs
     // -----------------------------------------------------------------------
@@ -55,12 +89,29 @@ public class WorldArea {
         public String  charName;
         public int     x, y;
         public boolean interactable;
-        public String  triggerAreaId;  // null = no cutscene trigger
-        public String  combatFile;     // null = no combat; filename of combat board (e.g. "combat_board_fescue_unlock.txt")
-        public String  winFlag;        // flag key to set to 1 when combat is won; null = no flag
+        public String  triggerAreaId;   // null = no cutscene trigger
+        public String  combatFile;      // null = no combat; filename of combat board
+        public String  winFlag;         // flag key set to 1 on win; null = no flag
+        public String  winCutsceneId;   // cutscene to play on win; null = use {triggerAreaId}_post fallback
+        public String  lossCutsceneId;  // cutscene to play on loss; null = just return to world
+        public boolean followsPlayer;   // if true, NPC walks toward the player each frame
+        public String  team1Preset;     // pipe-separated names for a fixed team1 (skips DraftScreen); null = use DraftScreen
+        public String  showFlag;        // if set, NPC only appears when this flag >= 1
     }
 
     public final java.util.List<WorldNpc> npcs = new java.util.ArrayList<>();
+
+    // -----------------------------------------------------------------------
+    // Dropped items (transient — not saved to file)
+    // -----------------------------------------------------------------------
+
+    public static class WorldDrop {
+        public int  x, y;
+        public Item item;
+        public WorldDrop(int x, int y, Item item) { this.x = x; this.y = y; this.item = item; }
+    }
+
+    public final java.util.List<WorldDrop> drops = new java.util.ArrayList<>();
 
     public WorldArea(String areaId, int width, int height) {
         this.areaId  = areaId;
@@ -85,6 +136,8 @@ public class WorldArea {
         sb.append("height=").append(height).append('\n');
         sb.append("spawnX=").append(spawnX).append('\n');
         sb.append("spawnY=").append(spawnY).append('\n');
+        if (entryCutsceneId     != null) sb.append("entryCutsceneId=").append(entryCutsceneId).append('\n');
+        if (postEntryCutsceneId != null) sb.append("postEntryCutsceneId=").append(postEntryCutsceneId).append('\n');
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 WorldTile t = tiles[x][y];
@@ -107,15 +160,28 @@ public class WorldArea {
               .append(ov.tileId == null ? "-" : ov.tileId)
               .append('\n');
         }
+        for (SwapMapOverride sm : swapMaps) {
+            sb.append("swapMap=")
+              .append(sm.flagKey).append(',')
+              .append(sm.op).append(',')
+              .append(sm.threshold).append(',')
+              .append(sm.targetFile)
+              .append('\n');
+        }
         for (WorldNpc npc : npcs) {
             sb.append("npc=")
               .append(npc.charName).append(',')
               .append(npc.x).append(',')
               .append(npc.y).append(',')
               .append(npc.interactable ? '1' : '0').append(',')
-              .append(npc.triggerAreaId == null ? "-" : npc.triggerAreaId).append(',')
-              .append(npc.combatFile   == null ? "-" : npc.combatFile).append(',')
-              .append(npc.winFlag      == null ? "-" : npc.winFlag)
+              .append(npc.triggerAreaId  == null ? "-" : npc.triggerAreaId).append(',')
+              .append(npc.combatFile    == null ? "-" : npc.combatFile).append(',')
+              .append(npc.winFlag       == null ? "-" : npc.winFlag).append(',')
+              .append(npc.winCutsceneId  == null ? "-" : npc.winCutsceneId).append(',')
+              .append(npc.lossCutsceneId == null ? "-" : npc.lossCutsceneId).append(',')
+              .append(npc.followsPlayer ? '1' : '0').append(',')
+              .append(npc.team1Preset == null ? "-" : npc.team1Preset).append(',')
+              .append(npc.showFlag    == null ? "-" : npc.showFlag)
               .append('\n');
         }
         file.writeString(sb.toString(), false);
@@ -134,6 +200,12 @@ public class WorldArea {
         }
         if (line < lines.length && lines[line].trim().startsWith("spawnY=")) {
             area.spawnY = Integer.parseInt(lines[line++].trim().substring("spawnY=".length()));
+        }
+        if (line < lines.length && lines[line].trim().startsWith("entryCutsceneId=")) {
+            area.entryCutsceneId = lines[line++].trim().substring("entryCutsceneId=".length());
+        }
+        if (line < lines.length && lines[line].trim().startsWith("postEntryCutsceneId=")) {
+            area.postEntryCutsceneId = lines[line++].trim().substring("postEntryCutsceneId=".length());
         }
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
@@ -164,18 +236,34 @@ public class WorldArea {
                     ov.tileId     = p[6].equals("-") ? null : p[6];
                     area.overrides.add(ov);
                 } catch (Exception ignored) {}
+            } else if (l.startsWith("swapMap=")) {
+                String[] p = l.substring("swapMap=".length()).split(",", 4);
+                if (p.length < 4) continue;
+                try {
+                    SwapMapOverride sm = new SwapMapOverride();
+                    sm.flagKey    = p[0];
+                    sm.op         = p[1];
+                    sm.threshold  = Integer.parseInt(p[2]);
+                    sm.targetFile = p[3];
+                    area.swapMaps.add(sm);
+                } catch (Exception ignored) {}
             } else if (l.startsWith("npc=")) {
-                String[] p = l.substring("npc=".length()).split(",", 7);
+                String[] p = l.substring("npc=".length()).split(",", 12);
                 if (p.length < 5) continue;
                 try {
-                    WorldNpc npc      = new WorldNpc();
-                    npc.charName      = p[0];
-                    npc.x             = Integer.parseInt(p[1]);
-                    npc.y             = Integer.parseInt(p[2]);
-                    npc.interactable  = p[3].equals("1");
-                    npc.triggerAreaId = p[4].equals("-") ? null : p[4];
-                    npc.combatFile    = p.length > 5 && !p[5].equals("-") ? p[5] : null;
-                    npc.winFlag       = p.length > 6 && !p[6].equals("-") ? p[6] : null;
+                    WorldNpc npc       = new WorldNpc();
+                    npc.charName       = p[0];
+                    npc.x              = Integer.parseInt(p[1]);
+                    npc.y              = Integer.parseInt(p[2]);
+                    npc.interactable   = p[3].equals("1");
+                    npc.triggerAreaId  = p[4].equals("-") ? null : p[4];
+                    npc.combatFile     = p.length > 5  && !p[5].equals("-")  ? p[5]  : null;
+                    npc.winFlag        = p.length > 6  && !p[6].equals("-")  ? p[6]  : null;
+                    npc.winCutsceneId  = p.length > 7  && !p[7].equals("-")  ? p[7]  : null;
+                    npc.lossCutsceneId = p.length > 8  && !p[8].equals("-")  ? p[8]  : null;
+                    npc.followsPlayer  = p.length > 9  && p[9].equals("1");
+                    npc.team1Preset    = p.length > 10 && !p[10].equals("-") ? p[10] : null;
+                    npc.showFlag       = p.length > 11 && !p[11].equals("-") ? p[11] : null;
                     area.npcs.add(npc);
                 } catch (Exception ignored) {}
             }
@@ -212,8 +300,22 @@ public class WorldArea {
                 t.backgroundId = ov.tileId;
             } else {
                 t.objectId = ov.tileId;
-                // If the object was removed, make the tile walkable again.
                 if (ov.tileId == null) t.walkable = true;
+            }
+        }
+        // Restore picked violetberry bushes based on position flags
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                WorldTile t = tiles[x][y];
+                if ("map_violetberry_bush_full".equals(t.objectId)
+                        && flags.is("vb_" + x + "_" + y)) {
+                    t.objectId = "map_violetberry_bush";
+                }
+                if ("map_dead_tree1".equals(t.objectId)
+                        && flags.is("tree_" + x + "_" + y + "_cut")) {
+                    t.objectId = null;
+                    t.walkable = true;
+                }
             }
         }
     }

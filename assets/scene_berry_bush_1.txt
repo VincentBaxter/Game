@@ -1,0 +1,3 @@
+NARRATOR You pick a violetberry from the bush.
+FLAG violetberries_count increment
+FLAG berry_1_picked 1

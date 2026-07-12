@@ -75,7 +75,6 @@ public class Evan extends Character {
                                      GameState state, Array<EngineEvent> events,
                                      int tx, int ty) {
             if (user instanceof Evan) ((Evan) user).currentPushDistance += 1;
-            user.setCurrentWait(0);
             events.add(new EngineEvent.PopupEvent("SPRINT", 0, "FREE", user.x, user.y));
             return AbilityResult.GRANT_MOVEMENT;
         }

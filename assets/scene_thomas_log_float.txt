@@ -1,0 +1,4 @@
+BACKGROUND storybg_forest.png
+FLAG repair_bridge_log_floated 1
+SAY Thomas: We can drop the tree into the river. The current will take it upstream and it'll get caught at the bridge.
+SAY Thomas: I'll meet you back at the bridge.

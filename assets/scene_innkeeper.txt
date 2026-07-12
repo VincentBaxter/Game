@@ -1,0 +1,13 @@
+SAY Innkeeper: Hello, welcome to the inn.
+CHOICE What would you like to ask?
+OPTION I'm looking to get a room for the night.
+SAY Innkeeper: Unfortunately, all of our rooms are inaccessible right now.
+SAY Innkeeper: The rooms are upstairs and the stairs are broken.
+SAY Innkeeper: They've been broken for days and it's really causing a problem.
+SAY Innkeeper: If you know anyone who can help, please let me know.
+SAY Innkeeper: Sorry I couldn't help you, but you can visit the bar for a drink. Here's some gold for your trouble.
+GOLD 20
+OPTION What do you know about the forest?
+SAY Innkeeper: I don't get out much seeing that I've got to keep an eye on this here inn.
+SAY Innkeeper: But travelers tell stories. Come back sometime and maybe I'll have heard a good one recently.
+END_CHOICE

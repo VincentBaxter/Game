@@ -1,0 +1,10 @@
+BACKGROUND storybg_forest.png
+IF repair_bridge_log_floated == 1
+SAY Thomas: The flood did some extra damage. I'll give you this pickaxe if you can get me 25 stones to fix the bridge.
+FLAG repair_bridge_stones_target 25
+ELSE
+SAY Thomas: I'll tell you what. I'll let you keep this pickaxe if you go and get me 20 stones to fix the bridge.
+FLAG repair_bridge_stones_target 20
+ENDIF
+SAY You: Deal.
+GIVE_ITEM Pickaxe|A sturdy pickaxe.|WEAPON|item_pickaxe

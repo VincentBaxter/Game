@@ -1,0 +1,5 @@
+BACKGROUND storybg_forest.png
+FLAG repair_bridge_complete 1
+SAY Thomas: And there it is! The bridge is fixed.
+SAY Thomas: As an additional gift, take this.
+GIVE_ITEM Thomas Soul|The soul of Thomas.|MISC|item_soul

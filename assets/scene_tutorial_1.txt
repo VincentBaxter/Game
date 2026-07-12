@@ -1,0 +1,2 @@
+BACKGROUND storybg_forest.png
+SAY Evan: You look out of place in these woods. Where are you from stranger?

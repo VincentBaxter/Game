@@ -123,17 +123,10 @@ public class NetworkClient {
         kryoClient.sendTCP(new NetworkAction(null, 0, new Action.PlayerMoveAction(x, y)));
     }
 
-    /**
-     * Tells the server to enter the ranked matchmaking queue.
-     */
-    public void joinQueue() {
-        if (!connected) return;
-        kryoClient.sendTCP(new NetworkAction(null, 0, new Action.JoinQueueAction(true)));
-    }
-
-    /** @deprecated Use joinQueue() — ranked is always true now. */
+    /** Joins the casual or ranked matchmaking queue. */
     public void joinQueue(boolean ranked) {
-        joinQueue();
+        if (!connected) return;
+        kryoClient.sendTCP(new NetworkAction(null, 0, new Action.JoinQueueAction(ranked)));
     }
 
     public void sendAction(Action action) {

@@ -1,0 +1,3 @@
+BACKGROUND storybg_forest.png
+SAY Luke: Fuckin' cocksucker.
+SAY Luke: Well earned.

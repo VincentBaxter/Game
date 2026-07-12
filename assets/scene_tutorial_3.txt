@@ -1,0 +1,8 @@
+BACKGROUND storybg_forest.png
+SAY Evan: Hold on, there's something up ahead.
+SAY Fescue: And where do you think you're going?
+SAY Evan: That doesn't concern you.
+SAY Fescue: Indeed it does. You will not take another step.
+SAY Evan: We're heading into combat. Over time, the combat board will collapse towards the Haven. Be careful, being on a tile that collapses is certain death.
+SAY Evan: You have no powers and will be no help. I'll take her.
+SAY Fescue: Your ass is grass!
